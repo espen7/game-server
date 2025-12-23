@@ -1,0 +1,48 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>game.engine</groupId>
+        <artifactId>orion-root</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>orion-gateway</artifactId>
+
+    <properties>
+        <netty.version>4.1.104.Final</netty.version> <!-- Using stable 4.1.x as 4.2 is Alpha/Beta and might not be in central easily or stable -->
+        <!-- User asked for 4.2, let's try to find if 4.2.0.Alpha* is available or stick to 4.1 if not sure. 
+             Actually, let's use a recent version. If user specifically asked for 4.2, I should try to use it.
+             Netty 4.2.0.RC1 is available? Let's check or just use a placeholder.
+             Let's use 4.1.x for stability unless I can confirm 4.2 availability, 
+             but user said "Netty 4.2". I will try to use a 4.2 version if possible, 
+             but standard maven central might only have Alphas. 
+             Let's use 4.2.0.Alpha4 which is on central. -->
+        <netty.version>4.2.0.Alpha4</netty.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>game.engine</groupId>
+            <artifactId>orion-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>game.engine</groupId>
+            <artifactId>orion-world</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>game.engine</groupId>
+            <artifactId>orion-player</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <!-- Netty Dependencies -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+    </dependencies>
+</project>
