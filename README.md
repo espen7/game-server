@@ -1,6 +1,10 @@
 ﻿# Orion Game Server Framework
 
-Orion 是一个基于 **Java 21** 和 **Apache Pekko** (Akka分支) 的高性能分布式游戏服务端框架。旨在简化大中型游戏（如 MMO）的后端开发，提供开箱即用的微服务架构、状态管理和高效通信机制。
+
+> ⚡ Next-gen Game Backend: Leveraging Java 21 Virtual Threads and Pekko Cluster for massive scalability. High-throughput gateway with Netty Epoll & Delta-sync state management.
+
+>  下一代游戏后端：利用 Java 21 虚拟线程和 Pekko 集群实现海量扩展。基于 Netty Epoll 的高吞吐网关及 Delta 增量状态同步。
+
 
 ## 为什么选择 Actor 模型? (Why Actor Model?)
 
@@ -103,4 +107,5 @@ mvn clean package
 *   **Network**: Netty 4.2.9.Final
 *   **Serialization**: Protocol Buffers 3.25.1
 *   **Logging**: Log4j2 2.22.1
+
 
