@@ -1,4 +1,4 @@
-package game.engine.player;
+package game.engine.player.actor;
 
 import org.apache.pekko.actor.AbstractActor;
 import org.apache.pekko.actor.ActorRef;

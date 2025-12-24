@@ -1,27 +1,28 @@
 package game.engine.gateway.actor;
 
 import org.apache.pekko.actor.AbstractActor;
-import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.Props;
 import org.apache.pekko.cluster.sharding.ClusterSharding;
 import org.apache.pekko.event.Logging;
 import org.apache.pekko.event.LoggingAdapter;
 import game.engine.core.OrionServices;
-import game.engine.player.PlayerActor;
+import game.engine.player.actor.PlayerActor;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 
 public class ChannelActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final Channel channel;
+    private final String gatewayId;
     private String playerId; // Bound after login
 
-    public ChannelActor(Channel channel) {
+    public ChannelActor(Channel channel, String gatewayId) {
         this.channel = channel;
+        this.gatewayId = gatewayId;
     }
 
-    public static Props props(Channel channel) {
-        return Props.create(ChannelActor.class, () -> new ChannelActor(channel));
+    public static Props props(Channel channel, String gatewayId) {
+        return Props.create(ChannelActor.class, () -> new ChannelActor(channel, gatewayId));
     }
 
     @Override
@@ -40,9 +41,56 @@ public class ChannelActor extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(String.class, this::handleInboundMessage) // 来自 Netty
-                .match(PlayerActor.PlayerMessage.class, this::handleOutboundMessage) // 来自 Cluster
+                .match(game.engine.gateway.codec.Packet.class, this::handlePacket)
+                .match(game.engine.core.message.Envelope.class, this::handleEnvelope)
+                .match(String.class, this::handleInboundMessage) // Keep for backward compatibility if needed
+                .match(PlayerActor.PlayerMessage.class, this::handleOutboundMessage)
                 .build();
+    }
+
+    private void handleEnvelope(game.engine.core.message.Envelope envelope) {
+        log.info("ChannelActor received envelope: {}", envelope.getLetter().getMsgId());
+        // TODO: Handle response from other services
+    }
+
+    private void handlePacket(game.engine.gateway.codec.Packet packet) {
+        int msgId = packet.getMsgId();
+        game.engine.gateway.handler.MessageRouter.Destination destination = game.engine.gateway.handler.MessageRouter.route(msgId);
+        
+        log.info("ChannelActor routing packet ID: {}, Destination: {}", msgId, destination);
+
+        game.engine.core.message.Letter letter = new game.engine.core.message.Letter(msgId, packet.getBody());
+        game.engine.core.message.Envelope envelope = new game.engine.core.message.Envelope(letter, playerId, gatewayId);
+
+        switch (destination) {
+            case GATEWAY:
+                handleGatewayPacket(envelope);
+                break;
+            case HOME:
+                forwardToHome(envelope);
+                break;
+            case WORLD:
+                forwardToWorld(envelope);
+                break;
+            default:
+                log.warning("Unknown message destination for ID: {}", msgId);
+                break;
+        }
+    }
+
+    private void handleGatewayPacket(game.engine.core.message.Envelope envelope) {
+        // TODO: Implement Gateway internal message handling
+        log.info("Handling Gateway envelope: {}", envelope.getLetter().getMsgId());
+    }
+
+    private void forwardToHome(game.engine.core.message.Envelope envelope) {
+        // TODO: Forward to Home Server
+        log.info("Forwarding envelope to Home: {}", envelope.getLetter().getMsgId());
+    }
+
+    private void forwardToWorld(game.engine.core.message.Envelope envelope) {
+        // TODO: Forward to World Server
+        log.info("Forwarding envelope to World: {}", envelope.getLetter().getMsgId());
     }
 
     private void handleInboundMessage(String msg) {

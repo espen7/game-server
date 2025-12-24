@@ -1,5 +1,6 @@
 package game.engine.world;
 
+import game.engine.world.actor.WorldServiceActor;
 import org.apache.pekko.actor.ActorSystem;
 import game.engine.core.OrionEngine;
 

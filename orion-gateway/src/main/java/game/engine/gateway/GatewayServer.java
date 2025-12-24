@@ -3,7 +3,7 @@ package game.engine.gateway;
 import org.apache.pekko.actor.ActorSystem;
 import game.engine.core.OrionEngine;
 import game.engine.gateway.netty.NettyServer;
-import game.engine.player.PlayerActor;
+import game.engine.player.actor.PlayerActor;
 
 public class GatewayServer {
     public static void main(String[] args) {

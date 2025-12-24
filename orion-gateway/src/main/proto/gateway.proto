@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package game.engine.gateway.proto;
+
+option java_package = "game.engine.gateway.proto";
+option java_outer_classname = "GatewayProto";
+
+message HeartbeatReq {
+  int64 timestamp = 1;
+}
+
+message HeartbeatResp {
+  int64 timestamp = 1;
+}
+
+message LoginReq {
+  string username = 1;
+  string token = 2;
+  string device_id = 3;
+}
+
+message LoginResp {
+  int32 code = 1; // 0: success, others: error
+  string msg = 2;
+  int64 uid = 3;
+}

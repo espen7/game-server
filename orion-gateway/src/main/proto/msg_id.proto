@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package game.engine.gateway.proto;
+
+option java_package = "game.engine.gateway.proto";
+option java_outer_classname = "MsgIdProto";
+
+enum MsgId {
+  // Gateway Internal Messages (0 - 999)
+  ID_NONE = 0;
+  ID_HEARTBEAT_REQ = 1;
+  ID_HEARTBEAT_RESP = 2;
+  ID_LOGIN_REQ = 101;
+  ID_LOGIN_RESP = 102;
+
+  // Home Messages (1000 - 1999)
+  ID_HOME_REQ = 1000;
+  
+  // World Messages (2000 - 2999)
+  ID_WORLD_REQ = 2000;
+}

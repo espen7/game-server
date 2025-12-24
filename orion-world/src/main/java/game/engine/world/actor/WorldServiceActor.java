@@ -1,4 +1,4 @@
-package game.engine.world;
+package game.engine.world.actor;
 
 import org.apache.pekko.actor.AbstractActor;
 import org.apache.pekko.actor.Props;
