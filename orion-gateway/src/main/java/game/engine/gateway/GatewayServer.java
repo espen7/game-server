@@ -21,7 +21,7 @@ public class GatewayServer {
     private static final Logger logger = LoggerFactory.getLogger(GatewayServer.class);
 
     public static void main(String[] args) {
-        // 1. 启动 Akka System (Gateway 节点)
+        // 1. 启动 Pekko System (Gateway 节点)
         ActorSystem system = OrionEngine.create()
                 .withRole("gateway")
                 .withPort(2552)

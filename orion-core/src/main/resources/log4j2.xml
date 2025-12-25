@@ -12,7 +12,7 @@
         <Logger name="game.engine" level="debug" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
-        <Logger name="akka" level="info" additivity="false">
+        <Logger name="org.apache.pekko" level="info" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
     </Loggers>

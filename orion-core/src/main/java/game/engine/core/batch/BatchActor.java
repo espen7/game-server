@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 
 /**
  * 基于 Actor 的批处理处理器。
- * 利用 Actor 模型避免显式锁，适合集成到 Akka 系统中。
+ * 利用 Actor 模型避免显式锁，适合集成到 Pekko 系统中。
  *
  * @param <T> 批处理项目的类型
  */

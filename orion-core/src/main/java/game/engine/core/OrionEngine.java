@@ -62,19 +62,19 @@ public class OrionEngine {
         // 覆盖配置
         Map<String, Object> overrides = new HashMap<>();
         if (role != null) {
-            overrides.put("org.apache.pekko.cluster.roles", Arrays.asList(role));
+            overrides.put("pekko.cluster.roles", Arrays.asList(role));
         }
         if (port != -1) {
-            overrides.put("akka.remote.artery.canonical.port", port);
+            overrides.put("pekko.remote.artery.canonical.port", port);
         }
         if (hostname != null) {
-            overrides.put("akka.remote.artery.canonical.hostname", hostname);
+            overrides.put("pekko.remote.artery.canonical.hostname", hostname);
         } else {
             // 如果未指定，自动检测本�?IP
             try {
                 String localIp = java.net.InetAddress.getLocalHost().getHostAddress();
                 logger.info("Hostname not specified, auto-detected local IP: {}", localIp);
-                overrides.put("akka.remote.artery.canonical.hostname", localIp);
+                overrides.put("pekko.remote.artery.canonical.hostname", localIp);
             } catch (java.net.UnknownHostException e) {
                 logger.warn("Failed to auto-detect local IP, falling back to configuration default", e);
             }
@@ -82,13 +82,13 @@ public class OrionEngine {
         if (!seedNodes.isEmpty()) {
             List<String> fullSeedNodes = new ArrayList<>();
             for (String node : seedNodes) {
-                if (!node.startsWith("akka://")) {
-                    fullSeedNodes.add("akka://" + CLUSTER_NAME + "@" + node);
+                if (!node.startsWith("pekko://")) {
+                    fullSeedNodes.add("pekko://" + CLUSTER_NAME + "@" + node);
                 } else {
                     fullSeedNodes.add(node);
                 }
             }
-            overrides.put("org.apache.pekko.cluster.seed-nodes", fullSeedNodes);
+            overrides.put("pekko.cluster.seed-nodes", fullSeedNodes);
         }
 
         Config finalConfig = ConfigFactory.parseMap(overrides).withFallback(baseConfig);
@@ -99,7 +99,7 @@ public class OrionEngine {
         // 初始化上下文
         OrionContext.setSystem(system);
 
-        logger.info("Orion Server started on port: {}", finalConfig.getInt("akka.remote.artery.canonical.port"));
+        logger.info("Orion Server started on port: {}", finalConfig.getInt("pekko.remote.artery.canonical.port"));
         return system;
     }
 }
