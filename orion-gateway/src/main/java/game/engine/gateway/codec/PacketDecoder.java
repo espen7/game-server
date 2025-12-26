@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import game.engine.core.message.Letter;
 import java.util.List;
 
 public class PacketDecoder extends ByteToMessageDecoder {
@@ -18,6 +19,6 @@ public class PacketDecoder extends ByteToMessageDecoder {
         byte[] body = new byte[in.readableBytes()];
         in.readBytes(body);
 
-        out.add(new Packet(msgId, body));
+        out.add(new Letter(msgId, body));
     }
 }

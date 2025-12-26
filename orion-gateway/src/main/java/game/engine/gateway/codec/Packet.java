@@ -1,5 +1,6 @@
 package game.engine.gateway.codec;
 
+@Deprecated
 public class Packet {
     private int msgId;
     private byte[] body;

@@ -1,7 +1,7 @@
 package game.engine.gateway.handler;
 
+import game.engine.core.message.Letter;
 import game.engine.gateway.actor.ChannelActor;
-import game.engine.gateway.codec.Packet;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.AttributeKey;
@@ -10,7 +10,7 @@ import org.apache.pekko.actor.ActorSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class GatewayHandler extends SimpleChannelInboundHandler<Packet> {
+public class GatewayHandler extends SimpleChannelInboundHandler<Letter> {
     private static final Logger logger = LoggerFactory.getLogger(GatewayHandler.class);
     public static final AttributeKey<ActorRef> CHANNEL_ACTOR_KEY = AttributeKey.valueOf("channelActor");
     
@@ -41,7 +41,7 @@ public class GatewayHandler extends SimpleChannelInboundHandler<Packet> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Packet packet) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, Letter packet) throws Exception {
         ActorRef channelActor = ctx.channel().attr(CHANNEL_ACTOR_KEY).get();
         if (channelActor != null) {
             channelActor.tell(packet, ActorRef.noSender());
