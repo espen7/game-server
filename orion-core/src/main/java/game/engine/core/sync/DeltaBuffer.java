@@ -5,7 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 /**
- * Delta 数据缓冲区，用于合并多个实体�?Delta�?
+ * Delta 数据缓冲区，用于合并多个实体的 Delta 数据。
  * 格式: [EntityCount(4)] [EntityID(4) + DeltaLen(4) + DeltaBytes]...
  */
 public class DeltaBuffer {
@@ -14,9 +14,10 @@ public class DeltaBuffer {
     private int count = 0;
 
     /**
-     * 添加一个实体的 Delta 数据�?
+     * 添加一个实体的 Delta 数据。
+     * 
      * @param entityId 实体 ID
-     * @param entity 实体对象
+     * @param entity   实体对象
      */
     public void addEntity(int entityId, DeltaEntity entity) throws IOException {
         if (entity.isDirty()) {
@@ -31,7 +32,7 @@ public class DeltaBuffer {
     }
 
     /**
-     * 获取最终的合并字节数组�?
+     * 获取最终的合并字节数组。
      * 包含头部 [Count(4)]
      */
     public byte[] toBytes() {
@@ -45,7 +46,7 @@ public class DeltaBuffer {
             throw new RuntimeException("Failed to create delta buffer bytes", e);
         }
     }
-    
+
     public int getCount() {
         return count;
     }

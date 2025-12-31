@@ -8,16 +8,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 支持字段�?Delta 压缩的实体基类�?
- * 维护一个位掩码 (BitSet) 来标记脏字段�?
- * 支持嵌套实体的递归 Delta 生成�?
+ * 支持字段级 Delta 压缩的实体基类。
+ * 维护一个位掩码 (BitSet) 来标记脏字段。
+ * 支持嵌套实体的递归 Delta 生成。
  */
 public abstract class DeltaEntity {
     private final BitSet dirtyFlags = new BitSet();
     private final Map<Integer, DeltaEntity> nestedEntities = new HashMap<>();
 
     /**
-     * 标记字段为脏�?
+     * 标记字段为脏。
+     * 
      * @param fieldIndex 字段索引
      */
     protected void markDirty(int fieldIndex) {
@@ -25,27 +26,30 @@ public abstract class DeltaEntity {
     }
 
     /**
-     * 注册嵌套实体，以便递归检查脏状态�?
+     * 注册嵌套实体，以便递归检查脏状态。
+     * 
      * @param fieldIndex 字段索引
-     * @param entity 嵌套实体
+     * @param entity     嵌套实体
      */
     protected void registerNested(int fieldIndex, DeltaEntity entity) {
         nestedEntities.put(fieldIndex, entity);
     }
 
     /**
-     * 检查自身或嵌套实体是否有变更�?
+     * 检查自身或嵌套实体是否有变更。
      */
     public boolean isDirty() {
-        if (!dirtyFlags.isEmpty()) return true;
+        if (!dirtyFlags.isEmpty())
+            return true;
         for (DeltaEntity child : nestedEntities.values()) {
-            if (child.isDirty()) return true;
+            if (child.isDirty())
+                return true;
         }
         return false;
     }
 
     /**
-     * 清除脏标记�?
+     * 清除脏标记。
      */
     public void clearDirty() {
         dirtyFlags.clear();
@@ -55,12 +59,23 @@ public abstract class DeltaEntity {
     }
 
     /**
-     * 生成 Delta 数据包�?
+     * 检查指定字段是否为脏。
+     * 
+     * @param fieldIndex 字段索引
+     * @return true if dirty
+     */
+    public boolean isFieldDirty(int fieldIndex) {
+        return dirtyFlags.get(fieldIndex);
+    }
+
+    /**
+     * 生成 Delta 数据包。
      * 格式: [MaskLen(1)][MaskBytes][FieldData...]
-     * 对于嵌套实体，FieldData �?[Length(4)][NestedDeltaBytes]
+     * 对于嵌套实体，FieldData 为 [Length(4)][NestedDeltaBytes]
      */
     public byte[] getDelta() throws IOException {
-        if (!isDirty()) return new byte[0];
+        if (!isDirty())
+            return new byte[0];
 
         // 1. 计算合并的脏标记 (包括嵌套实体)
         BitSet effectiveDirtyFlags = (BitSet) dirtyFlags.clone();
@@ -70,7 +85,8 @@ public abstract class DeltaEntity {
             }
         }
 
-        if (effectiveDirtyFlags.isEmpty()) return new byte[0];
+        if (effectiveDirtyFlags.isEmpty())
+            return new byte[0];
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
@@ -80,7 +96,7 @@ public abstract class DeltaEntity {
         dos.writeByte(maskBytes.length);
         dos.write(maskBytes);
 
-        // 3. 写入脏字段数�?
+        // 3. 写入脏字段数据
         for (int i = effectiveDirtyFlags.nextSetBit(0); i >= 0; i = effectiveDirtyFlags.nextSetBit(i + 1)) {
             if (nestedEntities.containsKey(i)) {
                 // 嵌套实体，递归写入 Delta
@@ -88,7 +104,7 @@ public abstract class DeltaEntity {
                 dos.writeInt(childDelta.length);
                 dos.write(childDelta);
             } else {
-                // 普通字段，由子类写�?
+                // 普通字段，由子类写入
                 writeField(dos, i);
             }
         }
@@ -97,8 +113,9 @@ public abstract class DeltaEntity {
     }
 
     /**
-     * 子类需实现此方法将指定字段写入流�?
-     * @param out 输出�?
+     * 子类需实现此方法将指定字段写入流。
+     * 
+     * @param out        输出流
      * @param fieldIndex 字段索引
      */
     protected abstract void writeField(DataOutputStream out, int fieldIndex) throws IOException;
