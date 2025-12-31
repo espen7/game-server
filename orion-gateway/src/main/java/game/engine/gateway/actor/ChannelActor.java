@@ -1,26 +1,30 @@
 package game.engine.gateway.actor;
 
-import game.engine.core.OrionServices;
-import org.apache.pekko.actor.AbstractActor;
+import game.engine.core.message.Envelope;
+import game.engine.core.message.Letter;
+import game.engine.gateway.proto.GatewayProto;
+import game.engine.gateway.proto.MsgIdProto;
+import game.engine.player.actor.PlayerActor;
+import org.apache.pekko.actor.AbstractActorWithStash;
+import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.Props;
 import org.apache.pekko.cluster.sharding.ClusterSharding;
 import org.apache.pekko.event.Logging;
 import org.apache.pekko.event.LoggingAdapter;
-import game.engine.player.actor.PlayerActor;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import com.google.protobuf.InvalidProtocolBufferException;
 
 /**
- * ChannelActor 负责管理单个网络连接（Channel）
- * 它处理来自客户端的入站消息，并将其路由到相应的服务或玩家 Actor
- * 同时它也负责将来自服务器内部的消息发送回客户端
+ * ChannelActor manages a single network connection.
+ * State Machine: Authenticating -> LoggedIn -> Running -> Disconnected
  */
-public class ChannelActor extends AbstractActor {
+public class ChannelActor extends AbstractActorWithStash {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    private final Channel channel; // 网络连接通道
-    private final String gatewayId; // 网关 ID
-    private String playerId; // 玩家 ID，登录后绑定
-    private long worldId;
+    private final Channel channel;
+    private final String gatewayId;
+    private String playerId;
+    private long accountId; // Store accountId after login
 
     public ChannelActor(Channel channel, String gatewayId) {
         this.channel = channel;
@@ -34,6 +38,9 @@ public class ChannelActor extends AbstractActor {
     @Override
     public void preStart() {
         log.info("ChannelActor started for channel: {}", channel.id());
+        channel.closeFuture().addListener(future -> {
+            getSelf().tell(new ConnectionClosed(), ActorRef.noSender());
+        });
     }
 
     @Override
@@ -46,139 +53,184 @@ public class ChannelActor extends AbstractActor {
 
     @Override
     public Receive createReceive() {
+        return authenticating();
+    }
+
+    // State: Authenticating
+    private Receive authenticating() {
         return receiveBuilder()
-                .match(game.engine.core.message.Letter.class, this::handleInboundMessage) // 处理来自客户端的
-                .match(game.engine.core.message.Envelope.class, this::handleEnvelope) // 处理内部信封消息
-                .match(PlayerActor.PlayerMessage.class, this::handleOutboundMessage) // 处理出站玩家消息
-                .matchAny(msg -> log.warning("Received unknown message: {} | {}", msg.getClass().getName(), msg))
+                .match(Letter.class, letter -> {
+                    int msgId = letter.msgId();
+                    if (msgId == MsgIdProto.MsgId.ID_LOGIN_REQ_VALUE) {
+                        handleLoginReq(letter);
+                    } else {
+                        log.warning("Received message {} while authenticating, ignoring.", msgId);
+                    }
+                })
+                .match(ConnectionClosed.class, msg -> handleConnectionClosed())
+                .matchAny(msg -> log.warning("Unknown message in authenticating: {}", msg))
                 .build();
     }
 
-    private void handleEnvelope(game.engine.core.message.Envelope envelope) {
-        log.info("ChannelActor received envelope: {}", envelope.getLetter().msgId());
-        // TODO: 处理来自其他服务的响应
-        // 这里分类型，看是否返回给客户端？ 还是一些状态处理
+    // State: LoggedIn (Auth success, waiting for EnterGame)
+    private Receive loggedIn() {
+        return receiveBuilder()
+                .match(Letter.class, letter -> {
+                    int msgId = letter.msgId();
+                    if (msgId == MsgIdProto.MsgId.ID_ENTER_GAME_REQ_VALUE) {
+                        handleEnterGameReq(letter);
+                    } else {
+                        log.warning("Received message {} while loggedIn, expecting EnterGame.", msgId);
+                    }
+                })
+                .match(ConnectionClosed.class, msg -> handleConnectionClosed())
+                .matchAny(msg -> log.warning("Unknown message in loggedIn: {}", msg))
+                .build();
     }
 
-    private void handleInboundMessage(game.engine.core.message.Letter letter) {
-        int msgId = letter.msgId();
-        game.engine.gateway.handler.MessageRouter.Destination destination = game.engine.gateway.handler.MessageRouter.route(msgId);
-        
-        log.info("ChannelActor routing letter ID: {}, Destination: {}", msgId, destination);
+    // State: Running (Game session active)
+    private Receive running() {
+        return receiveBuilder()
+                .match(Letter.class, this::handleInboundMessage)
+                .match(Envelope.class, this::handleEnvelope)
+                .match(PlayerActor.PlayerMessage.class, this::handleOutboundMessage)
+                .match(ConnectionClosed.class, msg -> handleConnectionClosed())
+                .matchAny(msg -> log.warning("Received unknown message in running: {}", msg))
+                .build();
+    }
 
-        game.engine.core.message.Envelope envelope = new game.engine.core.message.Envelope(letter, playerId, gatewayId);
+    // State: Disconnected (Crashed/Down)
+    private Receive disconnected() {
+        return receiveBuilder()
+                .matchAny(msg -> log.info("ChannelActor is disconnected, ignoring message: {}", msg))
+                .build();
+    }
 
-        switch (destination) {
-            case GATEWAY:
-                handleGatewayPacket(envelope);
-                break;
-            case HOME:
-                forwardToHome(envelope);
-                break;
-            case WORLD:
-                forwardToWorld(envelope);
-                break;
-            default:
-                log.warning("Unknown message destination for ID: {}", msgId);
-                break;
+    private void handleConnectionClosed() {
+        log.info("Channel connection closed. Switching to disconnected state.");
+        getContext().become(disconnected());
+        getContext().stop(getSelf());
+    }
+
+    private void handleLoginReq(Letter letter) {
+        try {
+            GatewayProto.LoginReq req = GatewayProto.LoginReq.parseFrom(letter.payload());
+            log.info("Processing LoginReq: username={}", req.getUsername());
+
+            // TODO: Forward to LoginService. For now, simulate success.
+            long simulatedAccountId = Math.abs(req.getUsername().hashCode());
+            long simulatedPlayerId = simulatedAccountId;
+
+            this.accountId = simulatedAccountId;
+            this.playerId = String.valueOf(simulatedPlayerId);
+
+            GatewayProto.LoginResp resp = GatewayProto.LoginResp.newBuilder()
+                    .setCode(0)
+                    .setMsg("Login Success")
+                    .setUid(simulatedPlayerId)
+                    .build();
+
+            sendToClient(MsgIdProto.MsgId.ID_LOGIN_RESP_VALUE, resp.toByteArray());
+
+            getContext().become(loggedIn());
+            log.info("State switched to LoggedIn. Waiting for EnterGame.");
+
+        } catch (InvalidProtocolBufferException e) {
+            log.error(e, "Failed to parse LoginReq");
         }
     }
 
-    private void handleGatewayPacket(game.engine.core.message.Envelope envelope) {
-        int msgId = envelope.getLetter().msgId();
-        log.info("Handling Gateway envelope: {}", msgId);
+    private void handleEnterGameReq(Letter letter) {
+        try {
+            GatewayProto.EnterGameReq req = GatewayProto.EnterGameReq.parseFrom(letter.payload());
+            long reqUid = req.getUid();
 
-        // 处理登录请求 (ID_LOGIN_REQ = 101)
-        if (msgId == 101) {
-            // 暂时使用简单的字节转字符串方式获取 playerId
-            this.playerId = new String(envelope.getLetter().payload());
-            log.info("Player logged in via Packet: {}", playerId);
-            
-            // 发送欢迎消息给客户端
-            sendToClient("Welcome " + playerId + " (via Packet)");
-            
-            // 通过 Sharding 通知 PlayerActor
-            ClusterSharding.get(getContext().getSystem())
-                    .shardRegion(PlayerActor.TYPE_NAME)
-                    .tell(new PlayerActor.PlayerMessage(playerId, "Login from Gateway via Packet"), getSelf());
-        } else {
-            log.warning("Unhandled Gateway message ID: {}", msgId);
-        }
-    }
-
-    private void forwardToHome(game.engine.core.message.Envelope envelope) {
-        // TODO: 转发到 Home 服务器
-        log.info("Forwarding envelope to Home: {}", envelope.getLetter().msgId());
-
-        ClusterSharding.get(getContext().getSystem())
-                .shardRegion(PlayerActor.TYPE_NAME)
-                .tell(new PlayerActor.PlayerMessage(playerId, ""), getSelf());
-    }
-
-    private void forwardToWorld(game.engine.core.message.Envelope envelope) {
-        // TODO: 转发到 World 服务器
-        log.info("Forwarding envelope to World: {}", envelope.getLetter().msgId());
-
-        // 转发给 WorldService-{id}
-        OrionServices.sendToService(getContext().getSystem(), "WorldService-" + worldId, envelope.getLetter(), getSelf());
-    }
-
-
-    private void handleOutboundMessage(PlayerActor.PlayerMessage msg) {
-        sendToClient("Server: " + msg.content);
-    }
-
-    private void handleInboundMessage(String msg) {
-        log.info("Received from client: {}", msg);
-
-        // 简单协�? "LOGIN|playerId" �?"CHAT|content"
-        if (msg.startsWith("LOGIN|")) {
-            this.playerId = msg.split("\\|")[1];
-            log.info("Player logged in: {}", playerId);
-
-            // 发送欢迎消息给客户�?
-            sendToClient("Welcome " + playerId);
-
-            // 通过 Sharding 通知 PlayerActor
-            ClusterSharding.get(getContext().getSystem())
-                    .shardRegion(PlayerActor.TYPE_NAME)
-                    .tell(new PlayerActor.PlayerMessage(playerId, "Login from Gateway"), getSelf());
-        } else if (msg.startsWith("MAP|")) {
-            // Protocol: MAP|worldId|content
-            String[] parts = msg.split("\\|", 3);
-            if (parts.length < 3) {
-                sendToClient("Invalid MAP command format. Use: MAP|worldId|content");
+            if (!String.valueOf(reqUid).equals(this.playerId)) {
+                log.warning("EnterGameReq uid {} does not match logged in playerId {}", reqUid, playerId);
                 return;
             }
-            String targetWorldId = parts[1];
-            String content = parts[2];
 
-            // 路由�?WorldService-{id}
-            OrionServices.sendToService(getContext().getSystem(), "WorldService-" + targetWorldId, content, getSelf());
-        } else if (playerId != null) {
-            // 路由�?PlayerActor
+            log.info("Processing EnterGameReq for playerId: {}", playerId);
+
+            // Forward to PlayerActor
             ClusterSharding.get(getContext().getSystem())
                     .shardRegion(PlayerActor.TYPE_NAME)
-                    .tell(new PlayerActor.PlayerMessage(playerId, msg), getSelf());
-        } else {
-            sendToClient("Please LOGIN first.");
+                    .tell(new PlayerActor.PlayerLoginCommand(reqUid, accountId), getSelf());
+
+            // Wait for EnterGameResp from PlayerActor
+            getContext().become(waitingForEnterGameResp());
+
+        } catch (InvalidProtocolBufferException e) {
+            log.error(e, "Failed to parse EnterGameReq");
         }
     }
 
-    private void sendToClient(String message) {
-        if (channel.isOpen()) {
-            // 根据 pipeline 判断是 WebSocket 还是 TCP，或者同时支持
-            // 为简单起见，如果是 websocket channel 我们假设使用 TextWebSocketFrame
-            // 但我们需要知道：
-            // 一个健壮的方法是检查 pipeline 或有一个标志位
-            // 我们假设如果 pipeline 有 websocket handler，我们就将其包装在 TextWebSocketFrame 中
-            
-            if (channel.pipeline().get("ws-handler") != null) {
-                channel.writeAndFlush(new TextWebSocketFrame(message));
-            } else {
-                // TCP 字符串
-                channel.writeAndFlush(message + "\n");
-            }
+    private Receive waitingForEnterGameResp() {
+        return receiveBuilder()
+                .match(GatewayProto.EnterGameResp.class, resp -> {
+                    log.info("Received EnterGameResp: code={}", resp.getCode());
+
+                    // Forward to client
+                    sendToClient(MsgIdProto.MsgId.ID_ENTER_GAME_RESP_VALUE, resp.toByteArray());
+
+                    if (resp.getCode() == 0) {
+                        getContext().become(running());
+                        log.info("State switched to Running.");
+                        unstashAll();
+                    } else {
+                        log.warning("EnterGame failed, reverting to LoggedIn");
+                        getContext().become(loggedIn());
+                    }
+                })
+                .match(ConnectionClosed.class, msg -> handleConnectionClosed())
+                .matchAny(msg -> {
+                    log.info("Stashing message while waiting for EnterGameResp: {}", msg);
+                    stash();
+                })
+                .build();
+    }
+
+    private void handleInboundMessage(Letter letter) {
+        int msgId = letter.msgId();
+        game.engine.gateway.handler.MessageRouter.Destination destination = game.engine.gateway.handler.MessageRouter
+                .route(msgId);
+        // Envelope envelope = new Envelope(letter, playerId, gatewayId);
+
+        switch (destination) {
+            case HOME:
+                log.info("Forwarding to Home: {}", msgId);
+                ClusterSharding.get(getContext().getSystem())
+                        .shardRegion(PlayerActor.TYPE_NAME)
+                        .tell(new PlayerActor.PlayerMessage(playerId, new String(letter.payload())), getSelf());
+                break;
+            case WORLD:
+                log.info("Forwarding to World: {}", msgId);
+                // Assuming WorldService is available via OrionServices or similar
+                break;
+            default:
+                // Forward to PlayerActor
+                ClusterSharding.get(getContext().getSystem())
+                        .shardRegion(PlayerActor.TYPE_NAME)
+                        .tell(new PlayerActor.PlayerMessage(playerId, new String(letter.payload())), getSelf());
+                break;
         }
+    }
+
+    private void handleEnvelope(Envelope envelope) {
+        // Handle responses from other services
+    }
+
+    private void handleOutboundMessage(PlayerActor.PlayerMessage msg) {
+        sendToClient(0, msg.content.getBytes());
+    }
+
+    private void sendToClient(int msgId, byte[] payload) {
+        if (channel.isOpen()) {
+            String content = msgId + "|" + java.util.Base64.getEncoder().encodeToString(payload);
+            channel.writeAndFlush(new TextWebSocketFrame(content));
+        }
+    }
+
+    private static class ConnectionClosed {
     }
 }

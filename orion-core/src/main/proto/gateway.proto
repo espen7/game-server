@@ -24,3 +24,15 @@ message LoginResp {
   string msg = 2;
   int64 uid = 3;
 }
+
+message EnterGameReq {
+  int64 uid = 1;
+}
+
+message EnterGameResp {
+  int32 code = 1;
+  string msg = 2;
+  int64 uid = 3;
+  string nickname = 4;
+  int32 level = 5;
+}

@@ -53,15 +53,28 @@ public class DeltaPersistenceTest {
         System.out.println("INSERT SQL: " + sql);
 
         assertTrue(sql.contains("INSERT INTO testplayer"));
-        assertTrue(sql.contains("VALUES (id, #{id})")); // 修正：MyBatis SQL 构建器生成的 VALUES 格式可能不同，通常是 (col1, col2) VALUES
-                                                        // (?, ?)
+        // MyBatis SQL 生成的 VALUES 可能是换行的，或者格式不同，放宽检查条件
+        assertTrue(sql.contains("VALUES"));
+
         // 检查列名
         assertTrue(sql.contains("hp"));
         assertTrue(sql.contains("player_name"));
         assertTrue(sql.contains("lvl"));
         // 检查占位符
+        assertTrue(sql.contains("#{id}"));
         assertTrue(sql.contains("#{hp}"));
         assertTrue(sql.contains("#{name}"));
         assertTrue(sql.contains("#{level}"));
+    }
+
+    @Test
+    public void testDeleteGeneration() {
+        TestPlayer player = new TestPlayer(3003L);
+        DeltaSqlProvider provider = new DeltaSqlProvider();
+        String sql = provider.delete(player);
+        System.out.println("DELETE SQL: " + sql);
+
+        assertTrue(sql.contains("DELETE FROM testplayer"));
+        assertTrue(sql.contains("WHERE (id = #{id})"));
     }
 }

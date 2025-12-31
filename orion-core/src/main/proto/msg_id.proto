@@ -12,6 +12,8 @@ enum MsgId {
   ID_HEARTBEAT_RESP = 2;
   ID_LOGIN_REQ = 101;
   ID_LOGIN_RESP = 102;
+  ID_ENTER_GAME_REQ = 103;
+  ID_ENTER_GAME_RESP = 104;
 
   // Home Messages (1000 - 1999)
   ID_HOME_REQ = 1000;
