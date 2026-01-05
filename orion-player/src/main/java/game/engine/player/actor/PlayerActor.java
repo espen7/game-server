@@ -1,5 +1,7 @@
 package game.engine.player.actor;
 
+import game.engine.core.actor.PlayerMessages;
+import game.engine.core.actor.PlayerShardingConfig;
 import game.engine.gateway.proto.GatewayProto;
 import game.engine.player.entity.Player;
 import game.engine.player.persistence.MyBatisUtil;
@@ -23,7 +25,6 @@ public class PlayerActor extends AbstractActorWithStash {
     private final long playerId;
     private Player player;
 
-    public static final String TYPE_NAME = "Player";
     private static final int PASSIVATION_TIMEOUT_MINUTES = 30;
 
     public PlayerActor() {
@@ -34,40 +35,12 @@ public class PlayerActor extends AbstractActorWithStash {
         return Props.create(PlayerActor.class);
     }
 
-    // Sharding Configuration
-    public static final ShardRegion.MessageExtractor messageExtractor = new ShardRegion.MessageExtractor() {
-        @Override
-        public String entityId(Object message) {
-            if (message instanceof PlayerMessage) {
-                return String.valueOf(((PlayerMessage) message).playerId);
-            } else if (message instanceof PlayerLoginCommand) {
-                return String.valueOf(((PlayerLoginCommand) message).playerId);
-            }
-            return null;
-        }
-
-        @Override
-        public Object entityMessage(Object message) {
-            return message;
-        }
-
-        @Override
-        public String shardId(Object message) {
-            int numberOfShards = 100;
-            String id = entityId(message);
-            if (id != null) {
-                return String.valueOf(Math.abs(id.hashCode()) % numberOfShards);
-            }
-            return null;
-        }
-    };
-
     public static ActorRef initSharding(org.apache.pekko.actor.ActorSystem system) {
         return ClusterSharding.get(system).start(
-                TYPE_NAME,
+                PlayerShardingConfig.TYPE_NAME,
                 Props.create(PlayerActor.class),
                 ClusterShardingSettings.create(system),
-                messageExtractor);
+                PlayerShardingConfig.MESSAGE_EXTRACTOR);
     }
 
     @Override
@@ -83,7 +56,7 @@ public class PlayerActor extends AbstractActorWithStash {
 
     private Receive uninitialized() {
         return receiveBuilder()
-                .match(PlayerLoginCommand.class, this::handleLogin)
+                .match(PlayerMessages.PlayerLoginCommand.class, this::handleLogin)
                 .matchAny(msg -> {
                     log.info("Stashing message in uninitialized state: {}", msg);
                     stash();
@@ -93,7 +66,7 @@ public class PlayerActor extends AbstractActorWithStash {
 
     private Receive running() {
         return receiveBuilder()
-                .match(PlayerMessage.class, msg -> {
+                .match(PlayerMessages.PlayerMessage.class, msg -> {
                     log.info("Player {} received message: {}", playerId, msg.content);
                     // Process message
                 })
@@ -110,7 +83,7 @@ public class PlayerActor extends AbstractActorWithStash {
                 .build();
     }
 
-    private void handleLogin(PlayerLoginCommand cmd) {
+    private void handleLogin(PlayerMessages.PlayerLoginCommand cmd) {
         log.info("Processing login for player: {}", playerId);
         try (SqlSession session = MyBatisUtil.getSqlSessionFactory().openSession()) {
             PlayerMapper mapper = session.getMapper(PlayerMapper.class);
@@ -166,27 +139,6 @@ public class PlayerActor extends AbstractActorWithStash {
             } catch (Exception e) {
                 log.error(e, "Error saving player: {}", playerId);
             }
-        }
-    }
-
-    // Messages
-    public static class PlayerMessage implements java.io.Serializable {
-        public final long playerId;
-        public final String content;
-
-        public PlayerMessage(long playerId, String content) {
-            this.playerId = playerId;
-            this.content = content;
-        }
-    }
-
-    public static class PlayerLoginCommand implements java.io.Serializable {
-        public final long playerId;
-        public final long accountId;
-
-        public PlayerLoginCommand(long playerId, long accountId) {
-            this.playerId = playerId;
-            this.accountId = accountId;
         }
     }
 

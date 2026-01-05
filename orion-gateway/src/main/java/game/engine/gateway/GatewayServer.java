@@ -1,5 +1,9 @@
 package game.engine.gateway;
 
+import game.engine.core.actor.AuthServiceProxy;
+import game.engine.core.actor.PlayerShardingConfig;
+import game.engine.core.actor.WorldServiceProxy;
+import game.engine.core.OrionServices;
 import game.engine.gateway.codec.PacketDecoder;
 import game.engine.gateway.codec.PacketEncoder;
 import game.engine.gateway.handler.GatewayHandler;
@@ -12,7 +16,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.pekko.actor.ActorSystem;
 import game.engine.core.OrionEngine;
-import game.engine.player.actor.PlayerActor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,10 +34,18 @@ public class GatewayServer {
 
         // 2. 初始 Sharding Proxy
         org.apache.pekko.cluster.sharding.ClusterSharding.get(system).startProxy(
-                PlayerActor.TYPE_NAME,
+                PlayerShardingConfig.TYPE_NAME,
                 java.util.Optional.of("player"),
-                PlayerActor.messageExtractor
+                PlayerShardingConfig.MESSAGE_EXTRACTOR
         );
+
+        // 创建 Auth 服务代理（Group Router，负载均衡）
+        system.actorOf(AuthServiceProxy.props(), OrionServices.AUTH_SERVICE_PROXY_NAME);
+        logger.info("AuthServiceProxy created with Group Router");
+
+        // 创建 World 服务代理（全局单例，处理所有到 World 的通信）
+        system.actorOf(WorldServiceProxy.props(), OrionServices.WORLD_SERVICE_PROXY_NAME);
+        logger.info("WorldServiceProxy created");
 
         // 3. 启动 Netty Server (WebSocket 端口 8080)
         bootstrap(system);

@@ -1,10 +1,15 @@
 package game.engine.gateway.actor;
 
+import game.engine.core.actor.AuthMessages;
+import game.engine.core.actor.PlayerMessages;
+import game.engine.core.actor.PlayerShardingConfig;
+import game.engine.core.actor.WorldMessages;
+import game.engine.core.actor.WorldServiceProxy;
+import game.engine.core.OrionServices;
 import game.engine.core.message.Envelope;
 import game.engine.core.message.Letter;
 import game.engine.gateway.proto.GatewayProto;
 import game.engine.gateway.proto.MsgIdProto;
-import game.engine.player.actor.PlayerActor;
 import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.Props;
 import org.apache.pekko.cluster.sharding.ClusterSharding;
@@ -34,6 +39,12 @@ public class ChannelActor
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final Channel channel;
     private final Map<Integer, RateLimiter> rateLimiters = new HashMap<>();
+    
+    // Auth 服务代理引用（Group Router 负载均衡）
+    private ActorRef authServiceProxy;
+    
+    // World 服务代理引用
+    private ActorRef worldServiceProxy;
 
     // FSM 状态定义
     public enum ChannelState {
@@ -45,19 +56,24 @@ public class ChannelActor
     }
 
     // FSM 数据定义，存储跨状态的上下文信息
-    public record ChannelData(long uid, long accountId) {
+    public record ChannelData(long uid, long accountId, int worldId) {
         public ChannelData() {
-            this(0, 0);
+            this(0, 0, 1); // 默认世界ID为1
         }
 
         public ChannelData withUid(long uid) {
             // 创建一个新的ChannelData实例，具有指定的uid
-            return new ChannelData(uid, this.accountId);
+            return new ChannelData(uid, this.accountId, this.worldId);
         }
 
         public ChannelData withAccountId(long accountId) {
             // 创建一个新的ChannelData实例，具有指定的accountId
-            return new ChannelData(this.uid, accountId);
+            return new ChannelData(this.uid, accountId, this.worldId);
+        }
+
+        public ChannelData withWorldId(int worldId) {
+            // 创建一个新的ChannelData实例，具有指定的worldId
+            return new ChannelData(this.uid, this.accountId, worldId);
         }
     }
 
@@ -133,9 +149,9 @@ public class ChannelActor
                     } else if (event instanceof game.engine.core.message.Envelope) {
                         // 处理来自其他服务的响应消息
                         handleEnvelope((game.engine.core.message.Envelope) event);
-                    } else if (event instanceof PlayerActor.PlayerMessage) {
+                    } else if (event instanceof PlayerMessages.PlayerMessage) {
                         // 处理来自PlayerActor的出站消息（服务器推送给客户端）
-                        handleOutboundMessage((PlayerActor.PlayerMessage) event);
+                        handleOutboundMessage((PlayerMessages.PlayerMessage) event);
                     }
                     return stay();
                 }));
@@ -173,8 +189,23 @@ public class ChannelActor
     }
 
     @Override
-    public void preStart() {
+    public void preStart() throws Exception {
         log.info("ChannelActor started for channel: {}", channel.id());
+        
+        // 查找 Auth 服务代理（Group Router）
+        scala.concurrent.Future<ActorRef> authFuture = getContext().getSystem()
+            .actorSelection(OrionServices.AUTH_SERVICE_PROXY_PATH)
+            .resolveOne(scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
+        authServiceProxy = scala.concurrent.Await.result(authFuture, 
+            scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
+        
+        // 查找 World 服务代理
+        scala.concurrent.Future<ActorRef> worldFuture = getContext().getSystem()
+            .actorSelection(OrionServices.WORLD_SERVICE_PROXY_PATH)
+            .resolveOne(scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
+        worldServiceProxy = scala.concurrent.Await.result(worldFuture,
+            scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
+        
         // 监听连接关闭事件，连接关闭时发送ConnectionClosed消息给自己
         channel.closeFuture().addListener(future -> {
             getSelf().tell(new ConnectionClosed(), ActorRef.noSender());
@@ -205,6 +236,7 @@ public class ChannelActor
             // 模拟账号ID和玩家ID生成（实际应用中应从认证服务获取）
             long simulatedAccountId = Math.abs(req.getUsername().hashCode());
             long simulatedPlayerId = simulatedAccountId;
+            int simulatedWorldId = (int) simulatedAccountId;
 
             GatewayProto.LoginResp resp = GatewayProto.LoginResp.newBuilder()
                     .setCode(0) // 0表示成功
@@ -217,7 +249,7 @@ public class ChannelActor
 
             log.info("State switched to LoggedIn. Waiting for EnterGame.");
             // 转换到已登录状态，并存储uid和账号ID
-            return goTo(ChannelState.LOGGED_IN).using(new ChannelData(simulatedPlayerId, simulatedAccountId));
+            return goTo(ChannelState.LOGGED_IN).using(new ChannelData(simulatedPlayerId, simulatedAccountId, simulatedWorldId));
 
         } catch (InvalidProtocolBufferException e) {
             log.error(e, "Failed to parse LoginReq");
@@ -240,8 +272,8 @@ public class ChannelActor
 
             // 转发进入游戏请求到对应的PlayerActor
             ClusterSharding.get(getContext().getSystem())
-                    .shardRegion(PlayerActor.TYPE_NAME)
-                    .tell(new PlayerActor.PlayerLoginCommand(reqUid, data.accountId), getSelf());
+                    .shardRegion(PlayerShardingConfig.TYPE_NAME)
+                    .tell(new PlayerMessages.PlayerLoginCommand(reqUid, data.accountId), getSelf());
 
             // 转换到等待响应状态
             return goTo(ChannelState.WAITING_FOR_ENTER_GAME_RESP);
@@ -268,18 +300,26 @@ public class ChannelActor
                 log.info("Forwarding to Home: {}", msgId);
                 // 转发到PlayerActor（HOME服务）
                 ClusterSharding.get(getContext().getSystem())
-                        .shardRegion(PlayerActor.TYPE_NAME)
-                        .tell(new PlayerActor.PlayerMessage(data.uid, new String(letter.payload())), getSelf());
+                        .shardRegion(PlayerShardingConfig.TYPE_NAME)
+                        .tell(new PlayerMessages.PlayerMessage(data.uid, new String(letter.payload())), getSelf());
                 break;
             case WORLD:
                 log.info("Forwarding to World: {}", msgId);
-                // TODO: 实现转发到World服务的逻辑
+                // 使用 WorldServiceProxy 转发（高性能 + 自动处理死信）
+                worldServiceProxy.tell(
+                    new WorldServiceProxy.ForwardToWorld(
+                        data.worldId,
+                        new WorldMessages.WorldMessage(data.uid, data.worldId, new String(letter.payload())),
+                        getSelf()
+                    ),
+                    getSelf()
+                );
                 break;
             default:
                 // 默认转发到PlayerActor
                 ClusterSharding.get(getContext().getSystem())
-                        .shardRegion(PlayerActor.TYPE_NAME)
-                        .tell(new PlayerActor.PlayerMessage(data.uid, new String(letter.payload())), getSelf());
+                        .shardRegion(PlayerShardingConfig.TYPE_NAME)
+                        .tell(new PlayerMessages.PlayerMessage(data.uid, new String(letter.payload())), getSelf());
                 break;
         }
     }
@@ -289,7 +329,7 @@ public class ChannelActor
         // TODO: 实现处理来自其他服务的响应消息逻辑
     }
 
-    private void handleOutboundMessage(PlayerActor.PlayerMessage msg) {
+    private void handleOutboundMessage(PlayerMessages.PlayerMessage msg) {
         // 处理来自PlayerActor的出站消息（服务器推送给客户端）
         sendToClient(0, msg.content.getBytes());
     }

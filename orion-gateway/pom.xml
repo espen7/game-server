@@ -27,16 +27,6 @@
             <artifactId>orion-core</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>game.engine</groupId>
-            <artifactId>orion-world</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>game.engine</groupId>
-            <artifactId>orion-player</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         
         <!-- Netty Dependencies -->
         <dependency>

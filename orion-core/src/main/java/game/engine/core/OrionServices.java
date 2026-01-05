@@ -4,43 +4,145 @@ import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.ActorSystem;
 import org.apache.pekko.cluster.pubsub.DistributedPubSub;
 import org.apache.pekko.cluster.pubsub.DistributedPubSubMediator;
+import org.apache.pekko.routing.FromConfig;
+import org.apache.pekko.routing.RoundRobinGroup;
+import scala.concurrent.duration.Duration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 public class OrionServices {
 
+    // 服务代理 Actor 路径常量
+    public static final String AUTH_SERVICE_PROXY_NAME = "auth-service-proxy";
+    public static final String AUTH_SERVICE_PROXY_PATH = "/user/" + AUTH_SERVICE_PROXY_NAME;
+    
+    public static final String WORLD_SERVICE_PROXY_NAME = "world-service-proxy";
+    public static final String WORLD_SERVICE_PROXY_PATH = "/user/" + WORLD_SERVICE_PROXY_NAME;
+
+    /**
+     * 注册服务到 DistributedPubSub
+     * 使 Actor 可以被跨节点的 Send 消息找到
+     * 
+     * @param system ActorSystem
+     * @param serviceName 服务名称（用于日志）
+     * @param serviceActor 服务 Actor 引用
+     */
     public static void registerService(ActorSystem system, String serviceName, ActorRef serviceActor) {
         ActorRef mediator = DistributedPubSub.get(system).mediator();
+        // 使用 Put 注册 Actor，这样可以通过 Send 发送消息
+        // Put 会自动使用 actor.path().toStringWithoutAddress() 作为路径
         mediator.tell(new DistributedPubSubMediator.Put(serviceActor), serviceActor);
-        // 如果需要广播，也可以订阅服务名称的主题
-        mediator.tell(new DistributedPubSubMediator.Subscribe(serviceName, serviceActor), serviceActor);
     }
 
-    public static void sendToService(ActorSystem system, String serviceName, Object message, ActorRef sender) {
+    /**
+     * 发送消息到指定服务（点对点）
+     * 使用 DistributedPubSub 的 Send 机制
+     * 
+     * @param system ActorSystem
+     * @param servicePath 服务路径（例如：/user/world-1）
+     * @param message 要发送的消息
+     * @param sender 发送者引用
+     */
+    public static void sendToService(ActorSystem system, String servicePath, Object message, ActorRef sender) {
         ActorRef mediator = DistributedPubSub.get(system).mediator();
-        // 发送到服务的一个实例（如果存在多个，由 mediator 随机选择）
-        // 我们假设服务 actor 已使用其路径注册，或者我们使用主题。
-        // 对于 Put/Send，我们需要路径。如果我们使用 Subscribe/Publish，它是广播。
-        // 要发送给任何单个实例，Send 更好，但要求 actor 做 Put。
-        // Put 中的路径通常是 self.path().withoutAddress()。
+        // 使用 Send：发送给指定路径的单个 Actor
+        mediator.tell(new DistributedPubSubMediator.Send(servicePath, message, false), sender);
+    }
+
+    /**
+     * 广播消息到所有订阅该主题的服务
+     * 
+     * @param system ActorSystem
+     * @param topic 主题名称
+     * @param message 要发送的消息
+     * @param sender 发送者引用
+     */
+    public static void publishToTopic(ActorSystem system, String topic, Object message, ActorRef sender) {
+        ActorRef mediator = DistributedPubSub.get(system).mediator();
+        // 使用 Publish：广播给所有订阅者
+        mediator.tell(new DistributedPubSubMediator.Publish(topic, message), sender);
+    }
+
+    /**
+     * 订阅主题
+     * 订阅后，该 Actor 会接收到所有发布到该主题的消息
+     * 
+     * @param system ActorSystem
+     * @param topic 主题名称
+     * @param subscriber 订阅者 Actor 引用
+     */
+    public static void subscribeTopic(ActorSystem system, String topic, ActorRef subscriber) {
+        ActorRef mediator = DistributedPubSub.get(system).mediator();
+        // 使用 Subscribe：订阅主题
+        mediator.tell(new DistributedPubSubMediator.Subscribe(topic, subscriber), subscriber);
+    }
+
+    /**
+     * 取消订阅主题
+     * 
+     * @param system ActorSystem
+     * @param topic 主题名称
+     * @param subscriber 订阅者 Actor 引用
+     */
+    public static void unsubscribeTopic(ActorSystem system, String topic, ActorRef subscriber) {
+        ActorRef mediator = DistributedPubSub.get(system).mediator();
+        // 使用 Unsubscribe：取消订阅主题
+        mediator.tell(new DistributedPubSubMediator.Unsubscribe(topic, subscriber), subscriber);
+    }
+
+    /**
+     * 查找服务 Actor 引用
+     * 使用 ActorSelection 通过服务名称查找
+     * 
+     * @param system ActorSystem
+     * @param serviceName 服务名称（Actor 名称）
+     * @return CompletableFuture<ActorRef> 查找到的 ActorRef，如果不存在则为 null
+     */
+    public static CompletableFuture<ActorRef> lookupService(ActorSystem system, String serviceName) {
+        CompletableFuture<ActorRef> future = new CompletableFuture<>();
         
-        // 此框架的简化方法：使用 Publish 到主题，但这会广播到组。
-        // 更好：使用带路径的 Send。但如果是动态的，我们不知道路径。
-        // 让我们使用一致的命名约定或仅使用 Group Router。
+        // 使用 ActorSelection 查找服务
+        // 路径格式: /user/{actorName}
+        String actorPath = "/user/" + serviceName;
         
-        // 实际上，让我们使用 DistributedPubSub 的 SendToAll 或仅 Send（如果我们知道路径）。
-        // 但如果是动态的， we 不知道路径。
+        system.actorSelection(actorPath)
+            .resolveOne(Duration.create(3, TimeUnit.SECONDS))
+            .onComplete(result -> {
+                if (result.isSuccess()) {
+                    future.complete(result.get());
+                } else {
+                    future.complete(null);
+                }
+                return null;
+            }, system.dispatcher());
         
-        // 替代方案：用于单例的 ClusterSingleton。
-        // 对于示例，让我们使用带有主题的 DistributedPubSub 并发送给一个。
-        // DistributedPubSub 不容易支持“发送给主题的一个”而不需要组。
+        return future;
+    }
+
+    /**
+     * 创建集群感知的 Group Router
+     * 用于高性能的点对点通信，自动处理节点故障和重连
+     * 
+     * @param system ActorSystem
+     * @param role 目标节点角色（例如："world"）
+     * @param actorPath Actor 路径（例如："/user/world-*"，支持通配符）
+     * @return ActorRef Router 引用
+     */
+    public static ActorRef createClusterRouter(ActorSystem system, String role, String actorPath) {
+        // 构建集群路径列表
+        List<String> routeesPaths = new ArrayList<>();
+        // 格式：pekko://ClusterSystem@{role}/user/world-*
+        String clusterPath = String.format("pekko://%s@%s%s", 
+            system.name(), role, actorPath);
+        routeesPaths.add(clusterPath);
         
-        // 让我们使用带有众所周知路径约定的 Send？不，那很脆弱。
-        
-        // 让我们使用基于“角色”的路由或仅用于示例的简单 ActorSelection。
-        // 或者更好，实现计划中提到的“ServiceProxy”，使用 Group Router。
-        
-        // 为了在此迭代中保持简单，我们只公开 Mediator 并让用户使用它，
-        // 或者提供一个助手发送到“服务主题”。
-        
-        mediator.tell(new DistributedPubSubMediator.Publish(serviceName, message), sender);
+        // 创建 Group Router（使用 RoundRobin 策略）
+        return system.actorOf(
+            new RoundRobinGroup(routeesPaths).props(),
+            "cluster-router-" + role + "-" + System.currentTimeMillis()
+        );
     }
 }

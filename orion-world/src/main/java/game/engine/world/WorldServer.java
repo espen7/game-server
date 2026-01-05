@@ -23,6 +23,9 @@ public class WorldServer {
                 .withSeedNodes("127.0.0.1:2551") // Join the cluster
                 .start();
 
-        system.actorOf(WorldServiceActor.props(worldId), "worldService-" + worldId);
+        // 创建固定的 World Actor，注册到服务发现
+        system.actorOf(WorldServiceActor.props(worldId), "world-" + worldId);
+        
+        System.out.println("World Server started for World ID: " + worldId);
     }
 }
