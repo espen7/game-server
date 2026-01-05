@@ -2,22 +2,30 @@ syntax = "proto3";
 
 package game.engine.gateway.proto;
 
+import "google/protobuf/descriptor.proto";
+
 option java_package = "game.engine.gateway.proto";
 option java_outer_classname = "MsgIdProto";
+
+extend google.protobuf.EnumValueOptions {
+  bool forward_home = 50001;        // 转发到home服务器
+  bool forward_world = 50002;       // 转发到world服务器
+  int32 rate_limit = 50005;         // 频率限制（次/秒）
+}
 
 enum MsgId {
   // Gateway Internal Messages (0 - 999)
   ID_NONE = 0;
   ID_HEARTBEAT_REQ = 1;
   ID_HEARTBEAT_RESP = 2;
-  ID_LOGIN_REQ = 101;
+  ID_LOGIN_REQ = 101 [(rate_limit) = 5];
   ID_LOGIN_RESP = 102;
   ID_ENTER_GAME_REQ = 103;
   ID_ENTER_GAME_RESP = 104;
 
   // Home Messages (1000 - 1999)
-  ID_HOME_REQ = 1000;
-  
+  ID_HOME_REQ = 1000 [(forward_home) = true];
+
   // World Messages (2000 - 2999)
-  ID_WORLD_REQ = 2000;
+  ID_WORLD_REQ = 2000 [(forward_world) = true];
 }

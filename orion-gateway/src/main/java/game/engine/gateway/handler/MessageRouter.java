@@ -1,6 +1,5 @@
 package game.engine.gateway.handler;
 
-
 public class MessageRouter {
 
     public enum Destination {
@@ -11,14 +10,22 @@ public class MessageRouter {
     }
 
     public static Destination route(int msgId) {
-        if (msgId < 1000) {
-            return Destination.GATEWAY;
-        } else if (msgId < 2000) {
-            return Destination.HOME;
-        } else if (msgId < 3000) {
-            return Destination.WORLD;
-        } else {
+        game.engine.gateway.proto.MsgIdProto.MsgId msgIdEnum = game.engine.gateway.proto.MsgIdProto.MsgId
+                .forNumber(msgId);
+        if (msgIdEnum == null) {
             return Destination.UNKNOWN;
         }
+
+        if (msgIdEnum.getValueDescriptor().getOptions()
+                .getExtension(game.engine.gateway.proto.MsgIdProto.forwardHome)) {
+            return Destination.HOME;
+        }
+
+        if (msgIdEnum.getValueDescriptor().getOptions()
+                .getExtension(game.engine.gateway.proto.MsgIdProto.forwardWorld)) {
+            return Destination.WORLD;
+        }
+
+        return Destination.GATEWAY;
     }
 }

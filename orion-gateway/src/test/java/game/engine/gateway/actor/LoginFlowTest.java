@@ -92,7 +92,7 @@ public class LoginFlowTest {
 
                 // 2. Send EnterGameReq
                 // We need the uid from LoginResp. In our mock, uid = hash("testuser").
-                long uid = Math.abs("testuser".hashCode());
+                long uid = Math.abs((long) "testuser".hashCode());
 
                 GatewayProto.EnterGameReq enterGameReq = GatewayProto.EnterGameReq.newBuilder()
                         .setUid(uid)

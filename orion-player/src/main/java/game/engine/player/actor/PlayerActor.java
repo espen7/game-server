@@ -20,21 +20,14 @@ import java.util.concurrent.TimeUnit;
 
 public class PlayerActor extends AbstractActorWithStash {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    private final String playerIdStr;
-    private long playerId;
+    private final long playerId;
     private Player player;
 
     public static final String TYPE_NAME = "Player";
     private static final int PASSIVATION_TIMEOUT_MINUTES = 30;
 
     public PlayerActor() {
-        this.playerIdStr = getSelf().path().name();
-        try {
-            this.playerId = Long.parseLong(playerIdStr);
-        } catch (NumberFormatException e) {
-            log.error("Invalid playerId: {}", playerIdStr);
-            // Handle error or stop
-        }
+        this.playerId = Long.parseLong(getSelf().path().name());
     }
 
     public static Props props() {
@@ -46,7 +39,7 @@ public class PlayerActor extends AbstractActorWithStash {
         @Override
         public String entityId(Object message) {
             if (message instanceof PlayerMessage) {
-                return ((PlayerMessage) message).playerId;
+                return String.valueOf(((PlayerMessage) message).playerId);
             } else if (message instanceof PlayerLoginCommand) {
                 return String.valueOf(((PlayerLoginCommand) message).playerId);
             }
@@ -79,7 +72,7 @@ public class PlayerActor extends AbstractActorWithStash {
 
     @Override
     public void preStart() {
-        log.info("PlayerActor started: {}", playerIdStr);
+        log.info("PlayerActor started: {}", playerId);
         getContext().setReceiveTimeout(Duration.create(PASSIVATION_TIMEOUT_MINUTES, TimeUnit.MINUTES));
     }
 
@@ -178,10 +171,10 @@ public class PlayerActor extends AbstractActorWithStash {
 
     // Messages
     public static class PlayerMessage implements java.io.Serializable {
-        public final String playerId;
+        public final long playerId;
         public final String content;
 
-        public PlayerMessage(String playerId, String content) {
+        public PlayerMessage(long playerId, String content) {
             this.playerId = playerId;
             this.content = content;
         }

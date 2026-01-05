@@ -33,35 +33,37 @@ public class AuthActorTest {
 
     @Test
     public void testAuthSuccess() {
-        new TestKit(system) {{
-            final ActorRef authRouter = system.actorOf(
-                FromConfig.getInstance().props(Props.create(AuthActor.class)), 
-                "authRouter"
-            );
+        new TestKit(system) {
+            {
+                final ActorRef authRouter = system.actorOf(
+                        FromConfig.getInstance().props(Props.create(AuthActor.class)),
+                        "authRouter");
 
-            Letter letter = new Letter(1, "valid_token".getBytes());
-            Envelope envelope = new Envelope(letter, "player1", "gateway1");
+                Letter letter = new Letter(1, "valid_token".getBytes());
+                Envelope envelope = new Envelope(letter, 1L, "gateway1");
 
-            authRouter.tell(envelope, getRef());
+                authRouter.tell(envelope, getRef());
 
-            expectMsg(Duration.ofSeconds(3), "AUTH_SUCCESS");
-        }};
+                expectMsg(Duration.ofSeconds(3), "AUTH_SUCCESS");
+            }
+        };
     }
 
     @Test
     public void testAuthFailure() {
-        new TestKit(system) {{
-            final ActorRef authRouter = system.actorOf(
-                FromConfig.getInstance().props(Props.create(AuthActor.class)), 
-                "authRouterFailure"
-            );
+        new TestKit(system) {
+            {
+                final ActorRef authRouter = system.actorOf(
+                        FromConfig.getInstance().props(Props.create(AuthActor.class)),
+                        "authRouterFailure");
 
-            Letter letter = new Letter(1, new byte[0]); // Invalid token
-            Envelope envelope = new Envelope(letter, "player2", "gateway1");
+                Letter letter = new Letter(1, new byte[0]); // Invalid token
+                Envelope envelope = new Envelope(letter, 2L, "gateway1");
 
-            authRouter.tell(envelope, getRef());
+                authRouter.tell(envelope, getRef());
 
-            expectMsg(Duration.ofSeconds(3), "AUTH_FAILURE");
-        }};
+                expectMsg(Duration.ofSeconds(3), "AUTH_FAILURE");
+            }
+        };
     }
 }

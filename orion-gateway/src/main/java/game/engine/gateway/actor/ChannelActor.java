@@ -14,6 +14,8 @@ import org.apache.pekko.event.LoggingAdapter;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import com.google.protobuf.InvalidProtocolBufferException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * ChannelActor manages a single network connection.
@@ -23,8 +25,9 @@ public class ChannelActor extends AbstractActorWithStash {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final Channel channel;
     private final String gatewayId;
-    private String playerId;
+    private long playerId;
     private long accountId; // Store accountId after login
+    private final Map<Integer, RateLimiter> rateLimiters = new HashMap<>();
 
     public ChannelActor(Channel channel, String gatewayId) {
         this.channel = channel;
@@ -61,6 +64,10 @@ public class ChannelActor extends AbstractActorWithStash {
         return receiveBuilder()
                 .match(Letter.class, letter -> {
                     int msgId = letter.msgId();
+                    if (!checkRateLimit(msgId)) {
+                        log.warning("Rate limit exceeded for msgId: {}", msgId);
+                        return;
+                    }
                     if (msgId == MsgIdProto.MsgId.ID_LOGIN_REQ_VALUE) {
                         handleLoginReq(letter);
                     } else {
@@ -77,6 +84,10 @@ public class ChannelActor extends AbstractActorWithStash {
         return receiveBuilder()
                 .match(Letter.class, letter -> {
                     int msgId = letter.msgId();
+                    if (!checkRateLimit(msgId)) {
+                        log.warning("Rate limit exceeded for msgId: {}", msgId);
+                        return;
+                    }
                     if (msgId == MsgIdProto.MsgId.ID_ENTER_GAME_REQ_VALUE) {
                         handleEnterGameReq(letter);
                     } else {
@@ -122,7 +133,7 @@ public class ChannelActor extends AbstractActorWithStash {
             long simulatedPlayerId = simulatedAccountId;
 
             this.accountId = simulatedAccountId;
-            this.playerId = String.valueOf(simulatedPlayerId);
+            this.playerId = simulatedPlayerId;
 
             GatewayProto.LoginResp resp = GatewayProto.LoginResp.newBuilder()
                     .setCode(0)
@@ -145,7 +156,7 @@ public class ChannelActor extends AbstractActorWithStash {
             GatewayProto.EnterGameReq req = GatewayProto.EnterGameReq.parseFrom(letter.payload());
             long reqUid = req.getUid();
 
-            if (!String.valueOf(reqUid).equals(this.playerId)) {
+            if (reqUid != this.playerId) {
                 log.warning("EnterGameReq uid {} does not match logged in playerId {}", reqUid, playerId);
                 return;
             }
@@ -192,6 +203,10 @@ public class ChannelActor extends AbstractActorWithStash {
 
     private void handleInboundMessage(Letter letter) {
         int msgId = letter.msgId();
+        if (!checkRateLimit(msgId)) {
+            log.warning("Rate limit exceeded for msgId: {}", msgId);
+            return;
+        }
         game.engine.gateway.handler.MessageRouter.Destination destination = game.engine.gateway.handler.MessageRouter
                 .route(msgId);
         // Envelope envelope = new Envelope(letter, playerId, gatewayId);
@@ -232,5 +247,46 @@ public class ChannelActor extends AbstractActorWithStash {
     }
 
     private static class ConnectionClosed {
+    }
+
+    private static class RateLimiter {
+        int count;
+        long lastResetTime;
+        final int limit;
+
+        RateLimiter(int limit) {
+            this.limit = limit;
+            this.lastResetTime = System.currentTimeMillis();
+        }
+
+        boolean tryAcquire() {
+            long now = System.currentTimeMillis();
+            if (now - lastResetTime > 1000) {
+                count = 0;
+                lastResetTime = now;
+            }
+            if (count < limit) {
+                count++;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private boolean checkRateLimit(int msgId) {
+        MsgIdProto.MsgId msgIdEnum = MsgIdProto.MsgId.forNumber(msgId);
+        if (msgIdEnum == null)
+            return true;
+
+        if (!msgIdEnum.getValueDescriptor().getOptions().hasExtension(MsgIdProto.rateLimit)) {
+            return true;
+        }
+
+        int limit = msgIdEnum.getValueDescriptor().getOptions().getExtension(MsgIdProto.rateLimit);
+        if (limit <= 0)
+            return true;
+
+        RateLimiter limiter = rateLimiters.computeIfAbsent(msgId, k -> new RateLimiter(limit));
+        return limiter.tryAcquire();
     }
 }

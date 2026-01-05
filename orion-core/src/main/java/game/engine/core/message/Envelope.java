@@ -7,11 +7,11 @@ import java.io.Serializable;
  */
 public class Envelope implements Serializable {
     private final Letter letter;
-    private final String playerId;
+    private final long playerId;
     private final String gatewayId;
     private final long timestamp;
 
-    public Envelope(Letter letter, String playerId, String gatewayId) {
+    public Envelope(Letter letter, long playerId, String gatewayId) {
         this.letter = letter;
         this.playerId = playerId;
         this.gatewayId = gatewayId;
@@ -22,7 +22,7 @@ public class Envelope implements Serializable {
         return letter;
     }
 
-    public String getPlayerId() {
+    public long getPlayerId() {
         return playerId;
     }
 
