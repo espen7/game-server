@@ -69,7 +69,7 @@ public class LoginFlowTest {
                 when(channel.closeFuture()).thenReturn(closeFuture);
 
                 // Create ChannelActor
-                ActorRef channelActor = system.actorOf(ChannelActor.props(channel, "gateway-1"));
+                ActorRef channelActor = system.actorOf(ChannelActor.props(channel));
 
                 // 1. Send LoginReq
                 GatewayProto.LoginReq loginReq = GatewayProto.LoginReq.newBuilder()

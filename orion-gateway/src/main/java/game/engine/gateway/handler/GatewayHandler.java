@@ -25,7 +25,7 @@ public class GatewayHandler extends SimpleChannelInboundHandler<Letter> {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
-        ActorRef channelActor = actorSystem.actorOf(ChannelActor.props(ctx.channel(), gatewayId));
+        ActorRef channelActor = actorSystem.actorOf(ChannelActor.props(ctx.channel()));
         ctx.channel().attr(CHANNEL_ACTOR_KEY).set(channelActor);
         logger.info("Channel active, bound ChannelActor: {}", channelActor);
     }
