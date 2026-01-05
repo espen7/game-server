@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package game.engine.core.proto;
+
+option java_package = "game.engine.core.proto";
+option java_outer_classname = "GenericProto";
+
+message LetterPb {
+    int32 msg_id = 1;
+    bytes payload = 2;
+}
+
+message EnvelopePb {
+    LetterPb letter = 1;
+    int32 msg_id = 2;
+    int32 sender = 3;
+    int64 uid = 4;
+    int64 timestamp = 5;
+}

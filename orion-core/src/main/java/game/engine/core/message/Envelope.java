@@ -8,13 +8,11 @@ import java.io.Serializable;
 public class Envelope implements Serializable {
     private final Letter letter;
     private final long uid;
-    private final String gatewayId;
     private final long timestamp;
 
-    public Envelope(Letter letter, long uid, String gatewayId) {
+    public Envelope(Letter letter, long uid) {
         this.letter = letter;
         this.uid = uid;
-        this.gatewayId = gatewayId;
         this.timestamp = System.currentTimeMillis();
     }
 
@@ -24,10 +22,6 @@ public class Envelope implements Serializable {
 
     public long getUid() {
         return uid;
-    }
-
-    public String getGatewayId() {
-        return gatewayId;
     }
 
     public long getTimestamp() {
