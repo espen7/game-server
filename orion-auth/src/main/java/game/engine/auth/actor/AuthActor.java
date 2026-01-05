@@ -36,18 +36,18 @@ public class AuthActor extends AbstractActor {
 
     private void handleAuth(Envelope envelope) {
         Letter letter = envelope.getLetter();
-        log.info("Processing auth request for player: {}, msgId: {}", envelope.getPlayerId(), letter.msgId());
+        log.info("Processing auth request for player: {}, msgId: {}", envelope.getUid(), letter.msgId());
 
         // Simulate authentication logic (e.g., token validation)
         // In a real scenario, this might involve DB or external API calls.
         boolean success = validateToken(letter.payload());
 
         if (success) {
-            log.info("Auth successful for player: {}", envelope.getPlayerId());
+            log.info("Auth successful for player: {}", envelope.getUid());
             // Send success response back to the sender (Gateway)
             getSender().tell("AUTH_SUCCESS", getSelf());
         } else {
-            log.warning("Auth failed for player: {}", envelope.getPlayerId());
+            log.warning("Auth failed for player: {}", envelope.getUid());
             getSender().tell("AUTH_FAILURE", getSelf());
         }
     }
