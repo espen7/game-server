@@ -57,7 +57,7 @@ public enum ProcessType {
     }
 
     /**
-     * 根据实例ID计算端口号
+     * 根据实例 ID计算端口号
      * 
      * @param instanceId 实例ID（从0开始）
      * @return 计算后的端口号
@@ -120,7 +120,7 @@ public enum ProcessType {
     }
 
     /**
-     * 判断是否为Portal节点
+     * 判断是否为 Portal节点
      */
     public boolean isPortal() {
         return this == PORTAL;
