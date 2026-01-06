@@ -40,7 +40,7 @@ public class AuthActorTest {
                         "authRouter");
 
                 Letter letter = new Letter(1, "valid_token".getBytes());
-                Envelope envelope = new Envelope(letter, 1L);
+                Envelope envelope = new Envelope(letter, 1L, System.currentTimeMillis());
 
                 authRouter.tell(envelope, getRef());
 
@@ -58,7 +58,7 @@ public class AuthActorTest {
                         "authRouterFailure");
 
                 Letter letter = new Letter(1, new byte[0]); // Invalid token
-                Envelope envelope = new Envelope(letter, 2L);
+                Envelope envelope = new Envelope(letter, 2L, System.currentTimeMillis());
 
                 authRouter.tell(envelope, getRef());
 

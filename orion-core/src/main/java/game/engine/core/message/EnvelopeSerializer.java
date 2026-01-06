@@ -1,6 +1,5 @@
 package game.engine.core.message;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import game.engine.core.proto.GenericProto;
 import org.apache.pekko.serialization.JSerializer;
@@ -14,9 +13,7 @@ public class EnvelopeSerializer extends JSerializer {
         } catch (InvalidProtocolBufferException e) {
             throw new RuntimeException(e);
         }
-        GenericProto.LetterPb letterPb = pb.getLetter();
-        Letter letter = new Letter(letterPb.getMsgId(), letterPb.getPayload().toByteArray());
-        return new Envelope(letter, pb.getUid());
+        return Envelope.fromPb(pb);
     }
 
     @Override
@@ -27,14 +24,8 @@ public class EnvelopeSerializer extends JSerializer {
     @Override
     public byte[] toBinary(Object o) {
         if ((o instanceof Envelope)) {
-            GenericProto.LetterPb.Builder builder = GenericProto.LetterPb.newBuilder();
-            builder.setMsgId(((Envelope) o).getLetter().msgId());
-            builder.setPayload(ByteString.copyFrom(((Envelope) o).getLetter().payload()));
-            GenericProto.EnvelopePb pb = GenericProto.EnvelopePb.newBuilder()
-                    .setLetter(builder)
-                    .setUid(((Envelope) o).getUid())
-                    .build();
-            return pb.toByteArray();
+            GenericProto.EnvelopePb.Builder pb = ((Envelope) o).toPb();
+            return pb.build().toByteArray();
         }
         return new byte[0];
     }

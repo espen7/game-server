@@ -1,30 +1,29 @@
 package game.engine.core.message;
 
+import com.google.protobuf.ByteString;
+import game.engine.core.proto.GenericProto;
+
 import java.io.Serializable;
 
 /**
  * Wraps a Letter with internal server metadata for routing and processing.
  */
-public class Envelope implements Serializable {
-    private final Letter letter;
-    private final long uid;
-    private final long timestamp;
+public record Envelope(Letter letter, long uid, long timestamp) implements Serializable {
 
-    public Envelope(Letter letter, long uid) {
-        this.letter = letter;
-        this.uid = uid;
-        this.timestamp = System.currentTimeMillis();
+    public GenericProto.EnvelopePb.Builder toPb() {
+        GenericProto.LetterPb.Builder letterPb = GenericProto.LetterPb.newBuilder();
+        letterPb.setMsgId(letter.msgId());
+        letterPb.setPayload(ByteString.copyFrom(letter.payload()));
+        GenericProto.EnvelopePb.Builder envelopePb = GenericProto.EnvelopePb.newBuilder();
+        envelopePb.setLetter(letterPb);
+        envelopePb.setUid(uid);
+        envelopePb.setTimestamp(timestamp);
+        return envelopePb;
     }
 
-    public Letter getLetter() {
-        return letter;
-    }
-
-    public long getUid() {
-        return uid;
-    }
-
-    public long getTimestamp() {
-        return timestamp;
+    public static  Envelope fromPb(GenericProto.EnvelopePb pb) {
+        GenericProto.LetterPb letterPb = pb.getLetter();
+        Letter letter = new Letter(letterPb.getMsgId(), letterPb.getPayload().toByteArray());
+        return new Envelope(letter, pb.getUid(), pb.getTimestamp());
     }
 }
