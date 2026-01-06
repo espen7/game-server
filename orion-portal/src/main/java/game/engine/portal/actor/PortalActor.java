@@ -1,4 +1,4 @@
-package game.engine.auth.actor;
+package game.engine.portal.actor;
 
 import game.engine.core.OrionServices;
 import org.apache.pekko.actor.AbstractActor;
@@ -9,22 +9,22 @@ import game.engine.core.message.Envelope;
 import game.engine.core.message.Letter;
 
 /**
- * Stateless AuthActor for handling login authentication.
+ * Stateless PortalActor for handling external requests (authentication, HTTP APIs, SDK, translation, etc.).
  * This actor does not maintain any player state.
  * Designed for horizontal scaling with Group Router load balancing.
  */
-public class AuthActor extends AbstractActor {
+public class PortalActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
     public static Props props() {
-        return Props.create(AuthActor.class, AuthActor::new);
+        return Props.create(PortalActor.class, PortalActor::new);
     }
 
     @Override
     public void preStart() {
         // 注册到 DistributedPubSub，使其可以被 Group Router 发现
-        OrionServices.registerService(getContext().getSystem(), "auth-service", getSelf());
-        log.info("AuthActor started: {}", getSelf().path());
+        OrionServices.registerService(getContext().getSystem(), "portal-service", getSelf());
+        log.info("PortalActor started: {}", getSelf().path());
     }
 
     @Override

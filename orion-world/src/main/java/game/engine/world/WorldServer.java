@@ -1,5 +1,6 @@
 package game.engine.world;
 
+import game.engine.core.ProcessType;
 import game.engine.world.actor.WorldServiceActor;
 import org.apache.pekko.actor.ActorSystem;
 import game.engine.core.OrionEngine;
@@ -17,15 +18,16 @@ public class WorldServer {
         }
         
         // Start as a "world" node
+        // 使用 worldId-1 作为实例ID，这样 worldId=1 对应端口 2560，worldId=2 对应 2561，以此类推
         ActorSystem system = OrionEngine.create()
-                .withRole("world")
-                .withPort(2553 + worldId - 1) // Avoid port conflict if running multiple locally
-                .withSeedNodes("127.0.0.1:2551") // Join the cluster
+                .withProcessType(ProcessType.WORLD)
+                .withPort(ProcessType.WORLD.getPort(worldId - 1))
+                .withDefaultSeedNode() // 连接到 Gateway 实例0
                 .start();
 
         // 创建固定的 World Actor，注册到服务发现
         system.actorOf(WorldServiceActor.props(worldId), "world-" + worldId);
         
-        System.out.println("World Server started for World ID: " + worldId);
+        System.out.println("World Server started for World ID: " + worldId + " on port: " + ProcessType.WORLD.getPort(worldId - 1));
     }
 }

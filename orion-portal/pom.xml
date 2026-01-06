@@ -8,7 +8,7 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>orion-auth</artifactId>
+    <artifactId>orion-portal</artifactId>
 
     <dependencies>
         <dependency>

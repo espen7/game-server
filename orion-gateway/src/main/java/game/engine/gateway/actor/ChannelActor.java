@@ -1,6 +1,6 @@
 package game.engine.gateway.actor;
 
-import game.engine.core.actor.AuthMessages;
+import game.engine.core.actor.PortalMessages;
 import game.engine.core.actor.PlayerMessages;
 import game.engine.core.actor.PlayerShardingConfig;
 import game.engine.core.actor.WorldMessages;
@@ -40,8 +40,8 @@ public class ChannelActor
     private final Channel channel;
     private final Map<Integer, RateLimiter> rateLimiters = new HashMap<>();
     
-    // Auth 服务代理引用（Group Router 负载均衡）
-    private ActorRef authServiceProxy;
+    // Portal 服务代理引用（Group Router 负载均衡）
+    private ActorRef portalServiceProxy;
     
     // World 服务代理引用
     private ActorRef worldServiceProxy;
@@ -192,11 +192,11 @@ public class ChannelActor
     public void preStart() throws Exception {
         log.info("ChannelActor started for channel: {}", channel.id());
         
-        // 查找 Auth 服务代理（Group Router）
-        scala.concurrent.Future<ActorRef> authFuture = getContext().getSystem()
-            .actorSelection(OrionServices.AUTH_SERVICE_PROXY_PATH)
+        // 查找 Portal 服务代理（Group Router）
+        scala.concurrent.Future<ActorRef> portalFuture = getContext().getSystem()
+            .actorSelection(OrionServices.PORTAL_SERVICE_PROXY_PATH)
             .resolveOne(scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
-        authServiceProxy = scala.concurrent.Await.result(authFuture, 
+        portalServiceProxy = scala.concurrent.Await.result(portalFuture, 
             scala.concurrent.duration.Duration.create(3, java.util.concurrent.TimeUnit.SECONDS));
         
         // 查找 World 服务代理

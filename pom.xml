@@ -12,7 +12,7 @@
         <module>orion-world</module>
         <module>orion-player</module>
         <module>orion-gateway</module>
-        <module>orion-auth</module>
+        <module>orion-portal</module>
     </modules>
 
     <properties>

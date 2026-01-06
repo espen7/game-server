@@ -1,10 +1,10 @@
 package game.engine.core.actor;
 
 /**
- * Auth 相关的消息定义
- * 用于认证服务的请求和响应
+ * Portal 相关的消息定义
+ * 用于对外服务（认证、HTTP API、SDK 等）的请求和响应
  */
-public class AuthMessages {
+public class PortalMessages {
 
     /**
      * 认证请求

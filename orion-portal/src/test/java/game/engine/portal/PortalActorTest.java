@@ -1,11 +1,11 @@
-package game.engine.auth;
+package game.engine.portal;
 
 import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.ActorSystem;
 import org.apache.pekko.actor.Props;
 import org.apache.pekko.routing.FromConfig;
 import org.apache.pekko.testkit.javadsl.TestKit;
-import game.engine.auth.actor.AuthActor;
+import game.engine.portal.actor.PortalActor;
 import game.engine.core.message.Envelope;
 import game.engine.core.message.Letter;
 import com.typesafe.config.Config;
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
-public class AuthActorTest {
+public class PortalActorTest {
     private static ActorSystem system;
 
     @BeforeAll
@@ -35,14 +35,14 @@ public class AuthActorTest {
     public void testAuthSuccess() {
         new TestKit(system) {
             {
-                final ActorRef authRouter = system.actorOf(
-                        FromConfig.getInstance().props(Props.create(AuthActor.class)),
-                        "authRouter");
+                final ActorRef portalRouter = system.actorOf(
+                        FromConfig.getInstance().props(Props.create(PortalActor.class)),
+                        "portalRouter");
 
                 Letter letter = new Letter(1, "valid_token".getBytes());
                 Envelope envelope = new Envelope(letter, 1L, System.currentTimeMillis());
 
-                authRouter.tell(envelope, getRef());
+                portalRouter.tell(envelope, getRef());
 
                 expectMsg(Duration.ofSeconds(3), "AUTH_SUCCESS");
             }
@@ -53,14 +53,14 @@ public class AuthActorTest {
     public void testAuthFailure() {
         new TestKit(system) {
             {
-                final ActorRef authRouter = system.actorOf(
-                        FromConfig.getInstance().props(Props.create(AuthActor.class)),
-                        "authRouterFailure");
+                final ActorRef portalRouter = system.actorOf(
+                        FromConfig.getInstance().props(Props.create(PortalActor.class)),
+                        "portalRouterFailure");
 
                 Letter letter = new Letter(1, new byte[0]); // Invalid token
                 Envelope envelope = new Envelope(letter, 2L, System.currentTimeMillis());
 
-                authRouter.tell(envelope, getRef());
+                portalRouter.tell(envelope, getRef());
 
                 expectMsg(Duration.ofSeconds(3), "AUTH_FAILURE");
             }

@@ -1,6 +1,7 @@
 package game.engine.gateway;
 
-import game.engine.core.actor.AuthServiceProxy;
+import game.engine.core.ProcessType;
+import game.engine.core.actor.PortalServiceProxy;
 import game.engine.core.actor.PlayerShardingConfig;
 import game.engine.core.actor.WorldServiceProxy;
 import game.engine.core.OrionServices;
@@ -24,13 +25,29 @@ public class GatewayServer {
     private static final Logger logger = LoggerFactory.getLogger(GatewayServer.class);
 
     public static void main(String[] args) {
+        // 解析网关实例ID（默认为0）
+        int instanceId = 0;
+        if (args.length > 0) {
+            try {
+                instanceId = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid instance ID, defaulting to 0");
+            }
+        }
+
         // 1. 启动 Pekko System (Gateway 节点)
-        ActorSystem system = OrionEngine.create()
-                .withRole("gateway")
-                .withPort(2552)
-                .withSeedNodes("127.0.0.1:2551") // 加入 GameServer
-                .start();
-        logger.info("ActorSystem created: {}", system.name());
+        OrionEngine engine = OrionEngine.create()
+                .withProcessType(ProcessType.GATEWAY)
+                .withPort(ProcessType.GATEWAY.getPort(instanceId));
+        
+        // 如果不是实例0，则需要连接到实例0作为 seed node
+        if (instanceId > 0) {
+            engine.withDefaultSeedNode();
+        }
+        
+        ActorSystem system = engine.start();
+        logger.info("ActorSystem created: {}, instance: {}, port: {}", 
+                system.name(), instanceId, ProcessType.GATEWAY.getPort(instanceId));
 
         // 2. 初始 Sharding Proxy
         org.apache.pekko.cluster.sharding.ClusterSharding.get(system).startProxy(
@@ -39,22 +56,23 @@ public class GatewayServer {
                 PlayerShardingConfig.MESSAGE_EXTRACTOR
         );
 
-        // 创建 Auth 服务代理（Group Router，负载均衡）
-        system.actorOf(AuthServiceProxy.props(), OrionServices.AUTH_SERVICE_PROXY_NAME);
-        logger.info("AuthServiceProxy created with Group Router");
+        // 创建 Portal 服务代理（Group Router，负载均衡）
+        system.actorOf(PortalServiceProxy.props(), OrionServices.PORTAL_SERVICE_PROXY_NAME);
+        logger.info("PortalServiceProxy created with Group Router");
 
         // 创建 World 服务代理（全局单例，处理所有到 World 的通信）
         system.actorOf(WorldServiceProxy.props(), OrionServices.WORLD_SERVICE_PROXY_NAME);
         logger.info("WorldServiceProxy created");
 
-        // 3. 启动 Netty Server (WebSocket 端口 8080)
-        bootstrap(system);
+        // 3. 启动 Netty Server (WebSocket 端口，根据实例ID分配）
+        int nettyPort = 8080 + instanceId;
+        bootstrap(system, instanceId, nettyPort);
     }
 
-    private static void bootstrap(ActorSystem actorSystem) {
+    private static void bootstrap(ActorSystem actorSystem, int instanceId, int nettyPort) {
         // 1. Configure Netty
-        String gatewayId = "gateway-1"; // Should come from config
-        NettyServerConfig config = new NettyServerConfig(8080);
+        String gatewayId = "gateway-" + instanceId;
+        NettyServerConfig config = new NettyServerConfig(nettyPort);
         ServerBootstrap bootstrap = ServerBootstrapFactory.createBootstrap(config);
 
         bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {

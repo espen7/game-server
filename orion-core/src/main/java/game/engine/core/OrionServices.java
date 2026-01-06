@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit;
 public class OrionServices {
 
     // 服务代理 Actor 路径常量
-    public static final String AUTH_SERVICE_PROXY_NAME = "auth-service-proxy";
-    public static final String AUTH_SERVICE_PROXY_PATH = "/user/" + AUTH_SERVICE_PROXY_NAME;
+    public static final String PORTAL_SERVICE_PROXY_NAME = "portal-service-proxy";
+    public static final String PORTAL_SERVICE_PROXY_PATH = "/user/" + PORTAL_SERVICE_PROXY_NAME;
     
     public static final String WORLD_SERVICE_PROXY_NAME = "world-service-proxy";
     public static final String WORLD_SERVICE_PROXY_PATH = "/user/" + WORLD_SERVICE_PROXY_NAME;

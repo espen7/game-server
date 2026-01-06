@@ -16,7 +16,7 @@ public class OrionEngine {
     private static final Logger logger = LoggerFactory.getLogger(OrionEngine.class);
     private static final String CLUSTER_NAME = "OrionCluster";
 
-    private String role;
+    private ProcessType processType;
     private String configResource = "application.conf";
     private final List<String> seedNodes = new ArrayList<>();
     private int port = -1;
@@ -28,8 +28,14 @@ public class OrionEngine {
         return new OrionEngine();
     }
 
+    public OrionEngine withProcessType(ProcessType processType) {
+        this.processType = processType;
+        return this;
+    }
+
+    @Deprecated
     public OrionEngine withRole(String role) {
-        this.role = role;
+        ProcessType.fromRole(role).ifPresent(type -> this.processType = type);
         return this;
     }
 
@@ -43,6 +49,26 @@ public class OrionEngine {
         return this;
     }
 
+    /**
+     * 使用默认的 seed node（Gateway 实例0 的地址）
+     * 
+     * @param hostname seed node 的主机名或IP（默认 "127.0.0.1"）
+     * @return OrionEngine 实例
+     */
+    public OrionEngine withDefaultSeedNode(String hostname) {
+        String seedNode = hostname + ":" + ProcessType.GATEWAY.getBasePort();
+        this.seedNodes.add(seedNode);
+        logger.debug("Using default seed node: {}", seedNode);
+        return this;
+    }
+
+    /**
+     * 使用本地默认 seed node（127.0.0.1:2551）
+     */
+    public OrionEngine withDefaultSeedNode() {
+        return withDefaultSeedNode("127.0.0.1");
+    }
+
     public OrionEngine withPort(int port) {
         this.port = port;
         return this;
@@ -54,16 +80,18 @@ public class OrionEngine {
     }
 
     public ActorSystem start() {
-        logger.info("Starting Orion Server with role: {}", role);
+        if (processType == null) {
+            throw new IllegalArgumentException("ProcessType must be specified via withProcessType()");
+        }
+        
+        logger.info("Starting Orion Server with process type: {} [{}]", processType.name(), processType.getDescription());
 
         // 加载基础配置
         Config baseConfig = ConfigFactory.load(configResource);
 
         // 覆盖配置
         Map<String, Object> overrides = new HashMap<>();
-        if (role != null) {
-            overrides.put("pekko.cluster.roles", Arrays.asList(role));
-        }
+        overrides.put("pekko.cluster.roles", Arrays.asList(processType.getRole()));
         if (port != -1) {
             overrides.put("pekko.remote.artery.canonical.port", port);
         }
@@ -98,8 +126,10 @@ public class OrionEngine {
         
         // 初始化上下文
         OrionContext.setSystem(system);
+        OrionContext.setProcessType(processType);
 
-        logger.info("Orion Server started on port: {}", finalConfig.getInt("pekko.remote.artery.canonical.port"));
+        logger.info("Orion Server started - ProcessType: {}, Port: {}", 
+                processType, finalConfig.getInt("pekko.remote.artery.canonical.port"));
         return system;
     }
 }
