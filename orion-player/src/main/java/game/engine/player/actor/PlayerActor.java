@@ -142,6 +142,102 @@ public class PlayerActor extends AbstractActorWithStash {
         }
     }
 
+    // RPC相关消息定义
+    
+    /**
+     * 获取玩家信息请求
+     */
+    public static class GetPlayerInfo implements java.io.Serializable {}
+    
+    /**
+     * 玩家信息响应
+     */
+    public static class PlayerInfoResponse implements java.io.Serializable {
+        private final Player player;
+        private final String error;
+        private final boolean success;
+        
+        public PlayerInfoResponse(Player player) {
+            this.player = player;
+            this.error = null;
+            this.success = true;
+        }
+        
+        public PlayerInfoResponse(String error) {
+            this.player = null;
+            this.error = error;
+            this.success = false;
+        }
+        
+        public Player getPlayer() { return player; }
+        public String getError() { return error; }
+        public boolean isSuccess() { return success; }
+    }
+    
+    /**
+     * 更新等级命令
+     */
+    public static class UpdateLevelCommand implements java.io.Serializable {
+        private final int newLevel;
+        
+        public UpdateLevelCommand(int newLevel) {
+            this.newLevel = newLevel;
+        }
+        
+        public int getNewLevel() { return newLevel; }
+    }
+    
+    /**
+     * 检查在线状态请求
+     */
+    public static class CheckOnlineStatus implements java.io.Serializable {}
+    
+    /**
+     * 在线状态响应
+     */
+    public static class OnlineStatusResponse implements java.io.Serializable {
+        private final boolean online;
+        
+        public OnlineStatusResponse(boolean online) {
+            this.online = online;
+        }
+        
+        public boolean isOnline() { return online; }
+    }
+    
+    /**
+     * 发送系统消息
+     */
+    public static class SendSystemMessage implements java.io.Serializable {
+        private final String message;
+        
+        public SendSystemMessage(String message) {
+            this.message = message;
+        }
+        
+        public String getMessage() { return message; }
+    }
+    
+    /**
+     * 命令执行结果
+     */
+    public static class CommandResult implements java.io.Serializable {
+        private final boolean success;
+        private final String error;
+        
+        public CommandResult(boolean success) {
+            this(success, null);
+        }
+        
+        public CommandResult(boolean success, String error) {
+            this.success = success;
+            this.error = error;
+        }
+        
+        public boolean isSuccess() { return success; }
+        public String getError() { return error; }
+    }
+    
     private static class StopMessage implements java.io.Serializable {
     }
 }

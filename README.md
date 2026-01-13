@@ -82,6 +82,12 @@ OrionEngine.create()
 ### 8. 异步日志
 - 基于 Actor 的异步日志引擎，使用 Log4j2
 
+### 9. 企业级RPC框架 (新增)
+- **分层架构设计**：边缘服务提供者、网格服务调用者、核心服务编排器
+- **专业命名体系**：ServiceInvoker/ServiceProvider 接口，体现企业级架构思想
+- **安全访问控制**：基于调用上下文的权限验证和流量控制
+- **异步非阻塞**：全面采用 CompletableFuture 实现高性能调用
+
 ## 快速开始 (Quick Start)
 
 ### 环境要求
@@ -167,24 +173,75 @@ java -jar orion-portal.jar 1 5
 ## 项目结构
 
 ```
-test-server/
-├── orion-core/           # 核心模块
-│   ├── ProcessType      # 进程类型枚举
-│   ├── OrionEngine      # 引擎启动器
-│   ├── OrionContext     # 全局上下文
-│   ├── actor/           # Actor 相关
-│   ├── batch/           # 批处理
-│   ├── hotfix/          # 热替换
-│   ├── message/         # 消息封装 (Envelope, Letter)
-│   ├── persistence/     # 持久化 (DeltaEntity)
-│   └── sync/            # 同步 (DeltaBuffer)
-├── orion-gateway/        # 网关服务
-│   ├── actor/           # ChannelActor
-│   ├── codec/           # Packet 编解码
-│   └── handler/         # Netty 处理器
-├── orion-world/          # 世界服务
-├── orion-player/         # 玩家服务
-└── orion-portal/         # Portal 服务
+orion-server/
+├── orion-core/              # 核心模块
+│   ├── config/             # 配置管理
+│   ├── rpc/                # RPC框架 (新增)
+│   │   ├── client/         # EdgeServiceProvider (边缘服务提供者)
+│   │   ├── internal/       # MeshServiceInvoker (网格服务调用者)
+│   │   ├── system/         # CoreServiceOrchestrator (核心服务编排器)
+│   │   └── context/        # RpcCallContext (调用上下文)
+│   ├── ProcessType         # 进程类型枚举
+│   ├── OrionEngine         # 引擎启动器
+│   ├── OrionContext        # 全局上下文
+│   ├── actor/              # Actor 相关
+│   ├── batch/              # 批处理
+│   ├── hotfix/             # 热替换
+│   ├── message/            # 消息封装 (Envelope, Letter)
+│   ├── persistence/        # 持久化 (DeltaEntity)
+│   └── sync/               # 同步 (DeltaBuffer)
+├── orion-gateway/           # 网关服务
+│   ├── actor/              # ChannelActor
+│   ├── codec/              # Packet 编解码
+│   ├── handler/            # Netty 处理器
+│   └── rpc/                # GatewayRpcClient (网关RPC客户端)
+├── orion-world/             # 世界服务
+│   └── rpc/                # WorldRpcService (世界RPC服务)
+├── orion-player/            # 玩家服务
+│   └── rpc/                # PlayerRpcService (玩家RPC服务)
+├── orion-portal/            # Portal 服务
+└── docs/                   # 文档
+    ├── rpc_design.md       # RPC设计文档
+    └── rpc_professional_naming.md # RPC专业命名规范
+```
+
+## RPC框架使用指南
+
+### 服务调用者类型
+
+Orion RPC框架提供三种不同类型的服务调用者，适应不同场景：
+
+#### 1. EdgeServiceProvider (边缘服务提供者)
+```java
+// 适用于API网关处理外部客户端请求
+EdgeServiceProvider edgeProvider = new EdgeServiceProvider(actorSystem, "api-gateway-001");
+CompletableFuture<RpcResponse> response = edgeProvider.callAsync("player-service", "getPlayerInfo", playerId);
+```
+
+#### 2. MeshServiceInvoker (网格服务调用者)
+```java
+// 适用于服务间通信
+MeshServiceInvoker meshInvoker = new MeshServiceInvoker(actorSystem, "player-service");
+boolean success = meshInvoker.callSync("world-service", "enterWorld", playerId, worldId);
+```
+
+#### 3. CoreServiceOrchestrator (核心服务编排器)
+```java
+// 适用于系统级任务和基础设施调用
+CoreServiceOrchestrator orchestrator = new CoreServiceOrchestrator(actorSystem, "scheduler-service");
+orchestrator.callAsync("player-service", "cleanupInactiveUsers", daysThreshold);
+```
+
+### 调用上下文管理
+
+```java
+// 创建不同类型的调用上下文
+RpcCallContext clientContext = RpcCallContext.newClientContext("web-client-123");
+RpcCallContext internalContext = RpcCallContext.newInternalContext("gateway-service");
+RpcCallContext systemContext = RpcCallContext.newSystemContext("cron-job-001");
+
+// 在请求中使用上下文
+RpcRequest request = new RpcRequest("target-service", "methodName", params, 5000, 3, clientContext);
 ```
 
 ## 开发指南
@@ -220,6 +277,118 @@ markDirty(0);  // name 变更
 // 生成增量包
 byte[] deltaPacket = toDeltaPacket();
 ```
+
+### 实现自定义RPC服务
+
+```java
+// 实现ServiceProvider接口
+public class CustomService implements ServiceProvider {
+    @Override
+    public String getServiceName() {
+        return "custom-service";
+    }
+    
+    @Override
+    public Object invokeMethod(String methodName, Object... parameters) throws RpcException {
+        // 实现具体业务逻辑
+        switch (methodName) {
+            case "doSomething":
+                return processSomething(parameters);
+            default:
+                throw new RpcException(RpcErrorType.METHOD_NOT_FOUND, "Method not found");
+        }
+    }
+    
+    @Override
+    public boolean isAvailable() {
+        return true;
+    }
+    
+    @Override
+    public String getHealthStatus() {
+        return "healthy";
+    }
+}
+```
+
+## 性能优化建议
+
+### 1. 虚拟线程配置
+```hocon
+# application.conf
+pekko {
+  actor {
+    default-dispatcher {
+      executor = "virtual-thread-executor"
+    }
+  }
+}
+```
+
+### 2. RPC调用优化
+- 优先使用异步调用避免阻塞
+- 合理设置超时时间和重试策略
+- 利用连接池复用RPC客户端
+
+### 3. 集群配置
+```hocon
+pekko {
+  cluster {
+    sharding {
+      # 调整分片配置以适应业务需求
+      rebalance-interval = 10s
+      least-shard-allocation-strategy {
+        rebalance-threshold = 5
+      }
+    }
+  }
+}
+```
+
+## 监控与调试
+
+### 1. 日志配置
+```xml
+<!-- log4j2.xml -->
+<Logger name="game.engine.core.rpc" level="DEBUG"/>
+<Logger name="org.apache.pekko.cluster" level="INFO"/>
+```
+
+### 2. JVM监控参数
+```bash
+-Xmx4g -Xms4g
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-Dcom.sun.management.jmxremote
+```
+
+## 故障排查
+
+### 常见问题
+
+1. **集群节点无法加入**
+   - 检查seed node配置
+   - 确认网络连通性
+   - 验证端口占用情况
+
+2. **RPC调用超时**
+   - 检查服务是否正常运行
+   - 调整超时配置
+   - 查看网络延迟
+
+3. **内存溢出**
+   - 监控Actor数量增长
+   - 检查消息积压情况
+   - 优化批处理大小
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+### 开发约定
+- 遵循Google Java Style Guide
+- 单元测试覆盖率不低于80%
+- 提交前运行 `mvn verify`
 
 ## 许可证 (License)
 
