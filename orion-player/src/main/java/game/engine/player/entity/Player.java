@@ -5,19 +5,18 @@ import game.engine.core.sync.DeltaEntity;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class Player extends DeltaEntity {
-
-    public static final int FIELD_NAME = 0;
-    public static final int FIELD_LEVEL = 1;
+    // 字段索引常量已移除，编译后会自动生成 PlayerFields.java
 
     private long id;
     private long accountId;
 
-    @DeltaColumn(name = "nickname", index = FIELD_NAME)
+    @DeltaColumn(name = "nickname", index = PlayerFields.NICKNAME)
     private String nickname;
 
-    @DeltaColumn(name = "lvl", index = FIELD_LEVEL)
+    @DeltaColumn(name = "lvl", index = PlayerFields.LEVEL)
     private int level;
 
     public Player(long id, long accountId) {
@@ -53,9 +52,9 @@ public class Player extends DeltaEntity {
     }
 
     public void setNickname(String nickname) {
-        if (this.nickname == null || !this.nickname.equals(nickname)) {
+        if (!Objects.equals(this.nickname, nickname)) {
             this.nickname = nickname;
-            markDirty(FIELD_NAME);
+            markDirty(PlayerFields.NICKNAME);  // 使用生成的常量
         }
     }
 
@@ -66,7 +65,7 @@ public class Player extends DeltaEntity {
     public void setLevel(int level) {
         if (this.level != level) {
             this.level = level;
-            markDirty(FIELD_LEVEL);
+            markDirty(PlayerFields.LEVEL);  // 使用生成的常量
         }
     }
 
@@ -83,11 +82,11 @@ public class Player extends DeltaEntity {
     @Override
     public Map<Integer, Object> collectDirtyValues() {
         Map<Integer, Object> values = new HashMap<>();
-        if (isFieldDirty(FIELD_NAME)) {
-            values.put(FIELD_NAME, nickname);
+        if (isFieldDirty(PlayerFields.NICKNAME)) {  // 使用生成的常量
+            values.put(PlayerFields.NICKNAME, nickname);
         }
-        if (isFieldDirty(FIELD_LEVEL)) {
-            values.put(FIELD_LEVEL, level);
+        if (isFieldDirty(PlayerFields.LEVEL)) {  // 使用生成的常量
+            values.put(PlayerFields.LEVEL, level);
         }
         return values;
     }

@@ -2,7 +2,7 @@ package game.engine.player.actor;
 
 import game.engine.core.actor.PlayerMessages;
 import game.engine.core.actor.PlayerShardingConfig;
-import game.engine.core.persistence.channel.DeltaPublisher;
+import game.engine.core.channel.DeltaPublisher;
 import game.engine.gateway.proto.GatewayProto;
 import game.engine.player.entity.Player;
 import game.engine.player.persistence.MyBatisUtil;

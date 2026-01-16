@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 1. 自动判断 INSERT/UPDATE
  * 2. 支持乐观锁（版本号）
  * 3. 缓存优化
+ * 4. 直接使用注解的 index 参数，零运行时开销
  */
 public class DeltaSqlProvider {
 
@@ -44,9 +45,8 @@ public class DeltaSqlProvider {
                 for (Field field : fields) {
                     DeltaColumn anno = field.getAnnotation(DeltaColumn.class);
                     if (anno != null) {
-                        // 检查该字段是否 Dirty
+                        // 直接使用注解的 index 参数，零运行时开销
                         if (entity.isFieldDirty(anno.index())) {
-                            // 使用 #{fieldName} 占位符
                             SET(anno.name() + " = #{" + field.getName() + "}");
                             hasChange = true;
                         }
@@ -55,7 +55,7 @@ public class DeltaSqlProvider {
 
                 // 如果没有任何字段变更，抛出异常
                 if (!hasChange) {
-                    throw new IllegalStateException("No dirty fields for entity: " + entity.getClass().getSimpleName() + "#" + getEntityId(entity));
+                    throw new IllegalStateException("No dirty fields for entity: " + clazz.getSimpleName() + "#" + getEntityId(entity));
                 }
 
                 WHERE("id = #{id}");

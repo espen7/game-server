@@ -1,4 +1,4 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel;
 
 import game.engine.core.sync.DeltaEntity;
 import game.engine.core.sync.DeltaSnapshot;

@@ -23,8 +23,8 @@ import java.util.concurrent.*;
  * 3. 添加错误重试和死信队列
  * 4. 支持优雅关闭
  * 
- * @deprecated 请使用新的通道系统 {@link game.engine.core.persistence.channel.DeltaPublisher}
- * 和 {@link game.engine.core.persistence.channel.DatabaseChannel}
+ * @deprecated 请使用新的通道系统 {@link game.engine.core.channel.DeltaPublisher}
+ * 和 {@link game.engine.core.channel.database.DatabaseChannel}
  * 
  * 迁移示例：
  * <pre>

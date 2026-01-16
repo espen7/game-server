@@ -1,4 +1,4 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel;
 
 /**
  * 通道监控指标

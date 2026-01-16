@@ -1,11 +1,13 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel.database;
 
+import game.engine.core.channel.BatchChannel;
 import game.engine.core.persistence.mybatis.MyBatisConfig;
 import game.engine.core.sync.DeltaEntity;
 import game.engine.core.sync.DeltaSnapshot;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.pekko.actor.ActorSystem;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -29,13 +31,13 @@ public class DatabaseChannel extends BatchChannel<DeltaSnapshot> {
     
     private static final String DEAD_LETTER_DIR = "dead_letter/database";
     
-    public DatabaseChannel() {
-        super("database", 100, 5000);
+    public DatabaseChannel(ActorSystem system) {
+        super("database", 100, 5000, system);
         initDeadLetterDir();
     }
     
-    public DatabaseChannel(int batchSize, long flushIntervalMs) {
-        super("database", batchSize, flushIntervalMs);
+    public DatabaseChannel(int batchSize, long flushIntervalMs, ActorSystem system) {
+        super("database", batchSize, flushIntervalMs, system);
         initDeadLetterDir();
     }
     

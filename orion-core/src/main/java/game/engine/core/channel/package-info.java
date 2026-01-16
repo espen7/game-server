@@ -3,11 +3,11 @@
  * 
  * <h2>核心组件</h2>
  * <ul>
- *   <li>{@link game.engine.core.persistence.channel.DeltaPublisher} - 发布者，管理所有通道</li>
- *   <li>{@link game.engine.core.persistence.channel.BatchChannel} - 批处理通道抽象基类</li>
- *   <li>{@link game.engine.core.persistence.channel.DatabaseChannel} - 数据库持久化通道</li>
- *   <li>{@link game.engine.core.persistence.channel.ClientSyncChannel} - 客户端同步通道</li>
- *   <li>{@link game.engine.core.persistence.channel.ChannelBootstrap} - 通道初始化器</li>
+ *   <li>{@link game.engine.core.channel.DeltaPublisher} - 发布者，管理所有通道</li>
+ *   <li>{@link game.engine.core.channel.BatchChannel} - 批处理通道抽象基类</li>
+ *   <li>{@link game.engine.core.channel.database.DatabaseChannel} - 数据库持久化通道</li>
+ *   <li>{@link game.engine.core.channel.client.ClientSyncChannel} - 客户端同步通道</li>
+ *   <li>{@link game.engine.core.channel.ChannelBootstrap} - 通道初始化器</li>
  * </ul>
  * 
  * <h2>使用流程</h2>
@@ -50,4 +50,4 @@
  * 
  * @since 2.0
  */
-package game.engine.core.persistence.channel;
+package game.engine.core.channel;

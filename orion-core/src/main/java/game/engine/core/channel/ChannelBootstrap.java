@@ -1,6 +1,8 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel;
 
-import game.engine.core.persistence.channel.DeltaPublisher;
+import game.engine.core.channel.database.DatabaseChannel;
+import game.engine.core.channel.client.ClientSyncChannel;
+import org.apache.pekko.actor.ActorSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * 使用示例：
  * <pre>
  * // 服务器启动时初始化
- * ChannelBootstrap.init();
+ * ChannelBootstrap.init(actorSystem);
  * 
  * // 服务器关闭时清理
  * ChannelBootstrap.shutdown();
@@ -27,8 +29,10 @@ public class ChannelBootstrap {
     
     /**
      * 初始化所有批处理通道
+     * 
+     * @param system Actor系统
      */
-    public static synchronized void init() {
+    public static synchronized void init(ActorSystem system) {
         if (initialized) {
             logger.warn("ChannelBootstrap already initialized");
             return;
@@ -39,15 +43,15 @@ public class ChannelBootstrap {
         DeltaPublisher publisher = DeltaPublisher.getInstance();
         
         // 1. 注册数据库持久化通道
-        DatabaseChannel dbChannel = new DatabaseChannel(100, 5000);
+        DatabaseChannel dbChannel = new DatabaseChannel(100, 5000, system);
         publisher.registerChannel("database", dbChannel);
         
         // 2. 注册客户端同步通道（需要GatewayLocator实现）
-        // ClientSyncChannel clientChannel = new ClientSyncChannel(gatewayLocator);
+        // ClientSyncChannel clientChannel = new ClientSyncChannel(gatewayLocator, system);
         // publisher.registerChannel("client-sync", clientChannel);
         
         // 3. 其他通道可以在这里注册
-        // RedisChannel redisChannel = new RedisChannel();
+        // RedisChannel redisChannel = new RedisChannel(system);
         // publisher.registerChannel("redis", redisChannel);
         
         initialized = true;
@@ -57,7 +61,7 @@ public class ChannelBootstrap {
     /**
      * 自定义初始化（支持外部配置）
      */
-    public static synchronized void init(ChannelConfig config) {
+    public static synchronized void init(ChannelConfig config, ActorSystem system) {
         if (initialized) {
             logger.warn("ChannelBootstrap already initialized");
             return;
@@ -71,14 +75,15 @@ public class ChannelBootstrap {
         if (config.isDatabaseEnabled()) {
             DatabaseChannel dbChannel = new DatabaseChannel(
                 config.getDatabaseBatchSize(),
-                config.getDatabaseFlushInterval()
+                config.getDatabaseFlushInterval(),
+                system
             );
             publisher.registerChannel("database", dbChannel);
         }
         
         // 根据配置初始化客户端同步通道
         if (config.isClientSyncEnabled() && config.getGatewayLocator() != null) {
-            ClientSyncChannel clientChannel = new ClientSyncChannel(config.getGatewayLocator());
+            ClientSyncChannel clientChannel = new ClientSyncChannel(config.getGatewayLocator(), system);
             publisher.registerChannel("client-sync", clientChannel);
         }
         

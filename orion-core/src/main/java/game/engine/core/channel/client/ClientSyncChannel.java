@@ -1,9 +1,11 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel.client;
 
+import game.engine.core.channel.BatchChannel;
 import game.engine.core.sync.DeltaBuffer;
 import game.engine.core.sync.DeltaEntity;
 import game.engine.core.sync.DeltaSnapshot;
 import org.apache.pekko.actor.ActorRef;
+import org.apache.pekko.actor.ActorSystem;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,8 +30,8 @@ public class ClientSyncChannel extends BatchChannel<ClientSyncData> {
     
     private final GatewayLocator gatewayLocator;
     
-    public ClientSyncChannel(GatewayLocator gatewayLocator) {
-        super("client-sync", 20, 100);  // 小批次，低延迟
+    public ClientSyncChannel(GatewayLocator gatewayLocator, ActorSystem system) {
+        super("client-sync", 20, 100, system);  // 小批次，低延迟
         this.gatewayLocator = gatewayLocator;
     }
     

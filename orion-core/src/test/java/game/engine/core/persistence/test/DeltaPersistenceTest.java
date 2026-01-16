@@ -16,7 +16,7 @@ public class DeltaPersistenceTest {
 
         // 2. 修改 HP
         player.setHp(99);
-        assertTrue(player.isFieldDirty(TestPlayer.FIELD_HP));
+        assertTrue(player.isFieldDirty(TestPlayerFields.HP));
 
         String sql1 = provider.updateDelta(player);
         System.out.println("SQL1: " + sql1);

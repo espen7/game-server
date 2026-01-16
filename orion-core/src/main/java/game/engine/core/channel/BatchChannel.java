@@ -1,19 +1,21 @@
-package game.engine.core.persistence.channel;
+package game.engine.core.channel;
 
+import game.engine.core.batch.BatchActor;
+import org.apache.pekko.actor.ActorRef;
+import org.apache.pekko.actor.ActorSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 批处理通道抽象基类。
+ * 批处理通道抽象基类（基于Actor模型）。
  * 
  * 职责：
- * 1. 提供通用的批处理逻辑（队列、批次大小、刷新间隔）
- * 2. 使用虚拟线程进行异步处理
+ * 1. 封装BatchActor，提供统一的批处理接口
+ * 2. 使用Actor消息驱动，无锁设计
  * 3. 支持错误重试和失败回调
  * 4. 提供监控指标
  * 
@@ -28,12 +30,9 @@ public abstract class BatchChannel<T> {
     protected final Logger logger = LoggerFactory.getLogger(getClass());
     
     private final String channelName;
-    private final BlockingQueue<T> queue;
-    private final ExecutorService executor;
-    private final int batchSize;
-    private final long flushIntervalMs;
+    private final ActorRef batchActor;
+    private final ActorSystem system;
     private final int maxRetry;
-    private volatile boolean running = true;
     
     // 监控指标
     private final AtomicLong processedCount = new AtomicLong(0);
@@ -46,24 +45,30 @@ public abstract class BatchChannel<T> {
      * @param channelName 通道名称
      * @param batchSize 批次大小
      * @param flushIntervalMs 刷新间隔（毫秒）
+     * @param system Actor系统
      */
-    public BatchChannel(String channelName, int batchSize, long flushIntervalMs) {
-        this(channelName, batchSize, flushIntervalMs, 3);
+    public BatchChannel(String channelName, int batchSize, long flushIntervalMs, ActorSystem system) {
+        this(channelName, batchSize, flushIntervalMs, 3, system);
     }
     
     /**
      * 构造函数（带重试次数）
      */
-    public BatchChannel(String channelName, int batchSize, long flushIntervalMs, int maxRetry) {
+    public BatchChannel(String channelName, int batchSize, long flushIntervalMs, int maxRetry, ActorSystem system) {
         this.channelName = channelName;
-        this.batchSize = batchSize;
-        this.flushIntervalMs = flushIntervalMs;
         this.maxRetry = maxRetry;
-        this.queue = new LinkedBlockingQueue<>();
-        this.executor = Executors.newVirtualThreadPerTaskExecutor();
+        this.system = system;
         
-        // 启动批处理循环
-        executor.submit(this::processLoop);
+        // 创建BatchActor，复用现有批处理逻辑
+        this.batchActor = system.actorOf(
+            BatchActor.props(
+                batchSize,
+                Duration.ofMillis(flushIntervalMs),
+                this::processBatchWithRetry  // 包装重试逻辑
+            ),
+            "batch-channel-" + channelName
+        );
+        
         logger.info("Channel [{}] started: batchSize={}, flushInterval={}ms, maxRetry={}", 
             channelName, batchSize, flushIntervalMs, maxRetry);
     }
@@ -96,68 +101,18 @@ public abstract class BatchChannel<T> {
     }
     
     /**
-     * 提交数据到批处理队列
+     * 提交数据到批处理Actor
      * 
      * @param item 数据项
      */
     public void submit(T item) {
-        if (!running) {
-            logger.warn("[{}] Channel is shutting down, rejecting item", channelName);
-            return;
-        }
-        
-        boolean success = queue.offer(item);
-        if (!success) {
-            logger.error("[{}] Queue is full, item rejected", channelName);
-        }
+        batchActor.tell(new BatchActor.Add<>(item), ActorRef.noSender());
     }
     
-    /**
-     * 批处理主循环
-     */
-    private void processLoop() {
-        List<T> batch = new ArrayList<>(batchSize);
-        long lastFlushTime = System.currentTimeMillis();
-        
-        logger.info("[{}] Process loop started", channelName);
-        
-        while (running) {
-            try {
-                // 非阻塞poll，超时100ms
-                T item = queue.poll(100, TimeUnit.MILLISECONDS);
-                if (item != null) {
-                    batch.add(item);
-                }
-                
-                long now = System.currentTimeMillis();
-                boolean shouldFlush = !batch.isEmpty() && 
-                    (batch.size() >= batchSize || now - lastFlushTime >= flushIntervalMs);
-                
-                if (shouldFlush) {
-                    processBatchWithRetry(batch);
-                    batch.clear();
-                    lastFlushTime = now;
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.warn("[{}] Process loop interrupted", channelName);
-                break;
-            } catch (Exception e) {
-                logger.error("[{}] Error in process loop", channelName, e);
-            }
-        }
-        
-        // 关闭前处理剩余数据
-        if (!batch.isEmpty()) {
-            logger.info("[{}] Flushing remaining {} items before shutdown", channelName, batch.size());
-            processBatchWithRetry(batch);
-        }
-        
-        logger.info("[{}] Process loop stopped", channelName);
-    }
+
     
     /**
-     * 带重试的批处理
+     * 带重试的批处理（由BatchActor调用）
      */
     private void processBatchWithRetry(List<T> batch) {
         int attempt = 0;
@@ -213,7 +168,7 @@ public abstract class BatchChannel<T> {
             processedCount.get(),
             failedCount.get(),
             retryCount.get(),
-            queue.size()
+            0  // Actor内部队列大小，暂不暴露
         );
     }
     
@@ -222,20 +177,19 @@ public abstract class BatchChannel<T> {
      */
     public void shutdown() {
         logger.info("[{}] Shutting down channel...", channelName);
-        running = false;
         
-        try {
-            executor.shutdown();
-            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                logger.warn("[{}] Executor did not terminate in time, forcing shutdown", channelName);
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            executor.shutdownNow();
-        }
+        // 发送Flush消息确保处理剩余数据，然后停止Actor
+        batchActor.tell(new BatchActor.Flush(), ActorRef.noSender());
+        system.stop(batchActor);
         
         ChannelMetrics metrics = getMetrics();
         logger.info("[{}] Channel shut down. Final metrics: {}", channelName, metrics);
+    }
+    
+    /**
+     * 获取Actor引用（用于高级操作）
+     */
+    protected ActorRef getBatchActor() {
+        return batchActor;
     }
 }

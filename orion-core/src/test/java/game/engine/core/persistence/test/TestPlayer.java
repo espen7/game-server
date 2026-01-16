@@ -5,24 +5,21 @@ import game.engine.core.sync.DeltaEntity;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 用于测试 Delta 持久化的实体。
  */
 public class TestPlayer extends DeltaEntity {
+    // 字段索引常量已移除，编译后会自动生成 TestPlayerFields.java
 
-    // 字段索引常量
-    public static final int FIELD_HP = 0;
-    public static final int FIELD_NAME = 1;
-    public static final int FIELD_LEVEL = 2;
-
-    @DeltaColumn(name = "hp", index = FIELD_HP)
+    @DeltaColumn(name = "hp", index = TestPlayerFields.HP)
     private int hp;
 
-    @DeltaColumn(name = "player_name", index = FIELD_NAME)
+    @DeltaColumn(name = "player_name", index = TestPlayerFields.NAME)
     private String name;
 
-    @DeltaColumn(name = "lvl", index = FIELD_LEVEL)
+    @DeltaColumn(name = "lvl", index = TestPlayerFields.LEVEL)
     private int level;
 
     private long id;
@@ -39,21 +36,21 @@ public class TestPlayer extends DeltaEntity {
     public void setHp(int hp) {
         if (this.hp != hp) {
             this.hp = hp;
-            markDirty(FIELD_HP);
+            markDirty(TestPlayerFields.HP);
         }
     }
 
     public void setName(String name) {
-        if (this.name == null || !this.name.equals(name)) {
+        if (!Objects.equals(this.name, name)) {
             this.name = name;
-            markDirty(FIELD_NAME);
+            markDirty(TestPlayerFields.NAME);
         }
     }
 
     public void setLevel(int level) {
         if (this.level != level) {
             this.level = level;
-            markDirty(FIELD_LEVEL);
+            markDirty(TestPlayerFields.LEVEL);
         }
     }
 
@@ -65,14 +62,14 @@ public class TestPlayer extends DeltaEntity {
     @Override
     public Map<Integer, Object> collectDirtyValues() {
         Map<Integer, Object> values = new HashMap<>();
-        if (isFieldDirty(FIELD_HP)) {
-            values.put(FIELD_HP, hp);
+        if (isFieldDirty(TestPlayerFields.HP)) {
+            values.put(TestPlayerFields.HP, hp);
         }
-        if (isFieldDirty(FIELD_NAME)) {
-            values.put(FIELD_NAME, name);
+        if (isFieldDirty(TestPlayerFields.NAME)) {
+            values.put(TestPlayerFields.NAME, name);
         }
-        if (isFieldDirty(FIELD_LEVEL)) {
-            values.put(FIELD_LEVEL, level);
+        if (isFieldDirty(TestPlayerFields.LEVEL)) {
+            values.put(TestPlayerFields.LEVEL, level);
         }
         return values;
     }
