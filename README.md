@@ -93,7 +93,7 @@ OrionEngine.create()
 - 基于 Actor 的异步日志引擎，使用 Log4j2
 
 ### 9. 企业级RPC框架
-- **分层架构设计**：边缘服务提供者、网格服务调用者、核心服务编排器
+- **分层架构设计**：客户端请求服务提供者、内部服务器服务调用者、核心服务编排器
 - **专业命名体系**：ServiceInvoker/ServiceProvider 接口，体现企业级架构思想
 - **安全访问控制**：基于调用上下文的权限验证和流量控制
 - **异步非阻塞**：全面采用 CompletableFuture 实现高性能调用
@@ -193,8 +193,8 @@ orion-server/
 ├── orion-core/              # 核心模块
 │   ├── config/             # 配置管理
 │   ├── rpc/                # RPC框架
-│   │   ├── client/         # EdgeServiceProvider (边缘服务提供者)
-│   │   ├── internal/       # MeshServiceInvoker (网格服务调用者)
+│   │   ├── client/         # EdgeServiceProvider (客户端请求服务提供者)
+│   │   ├── internal/       # MeshServiceInvoker (内部服务器服务调用者)
 │   │   ├── system/         # CoreServiceOrchestrator (核心服务编排器)
 │   │   └── context/        # RpcCallContext (调用上下文)
 │   ├── channel/            # 批处理通道系统 ✨
@@ -239,14 +239,14 @@ orion-server/
 
 Orion RPC框架提供三种不同类型的服务调用者，适应不同场景：
 
-#### 1. EdgeServiceProvider (边缘服务提供者)
+#### 1. EdgeServiceProvider (客户端请求服务提供者)
 ```java
 // 适用于API网关处理外部客户端请求
 EdgeServiceProvider edgeProvider = new EdgeServiceProvider(actorSystem, "api-gateway-001");
 CompletableFuture<RpcResponse> response = edgeProvider.callAsync("player-service", "getPlayerInfo", playerId);
 ```
 
-#### 2. MeshServiceInvoker (网格服务调用者)
+#### 2. MeshServiceInvoker (内部服务器服务调用者)
 ```java
 // 适用于服务间通信
 MeshServiceInvoker meshInvoker = new MeshServiceInvoker(actorSystem, "player-service");
