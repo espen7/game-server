@@ -6,15 +6,36 @@ import java.io.IOException;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 支持字段级 Delta 压缩的实体基类。
  * 维护一个位掩码 (BitSet) 来标记脏字段。
  * 支持嵌套实体的递归 Delta 生成。
+ * 
+ * 改进点：
+ * 1. 添加生命周期状态管理 (TRANSIENT/MANAGED/DETACHED)
+ * 2. 添加版本号支持乐观锁
+ * 3. 线程安全的脏标记操作
  */
 public abstract class DeltaEntity {
+    
+    /**
+     * 实体生命周期状态
+     */
+    public enum State {
+        /** 新创建，未持久化 */
+        TRANSIENT,
+        /** 已持久化，被管理中 */
+        MANAGED,
+        /** 已持久化，已脱管 */
+        DETACHED
+    }
+    
     private final BitSet dirtyFlags = new BitSet();
     private final Map<Integer, DeltaEntity> nestedEntities = new HashMap<>();
+    private volatile State state = State.TRANSIENT;
+    private final AtomicLong version = new AtomicLong(0);
 
     /**
      * 标记字段为脏。
@@ -22,7 +43,10 @@ public abstract class DeltaEntity {
      * @param fieldIndex 字段索引
      */
     protected void markDirty(int fieldIndex) {
-        dirtyFlags.set(fieldIndex);
+        synchronized (dirtyFlags) {
+            dirtyFlags.set(fieldIndex);
+            version.incrementAndGet();
+        }
     }
 
     /**
@@ -39,8 +63,10 @@ public abstract class DeltaEntity {
      * 检查自身或嵌套实体是否有变更。
      */
     public boolean isDirty() {
-        if (!dirtyFlags.isEmpty())
-            return true;
+        synchronized (dirtyFlags) {
+            if (!dirtyFlags.isEmpty())
+                return true;
+        }
         for (DeltaEntity child : nestedEntities.values()) {
             if (child.isDirty())
                 return true;
@@ -52,7 +78,9 @@ public abstract class DeltaEntity {
      * 清除脏标记。
      */
     public void clearDirty() {
-        dirtyFlags.clear();
+        synchronized (dirtyFlags) {
+            dirtyFlags.clear();
+        }
         for (DeltaEntity child : nestedEntities.values()) {
             child.clearDirty();
         }
@@ -65,7 +93,68 @@ public abstract class DeltaEntity {
      * @return true if dirty
      */
     public boolean isFieldDirty(int fieldIndex) {
-        return dirtyFlags.get(fieldIndex);
+        synchronized (dirtyFlags) {
+            return dirtyFlags.get(fieldIndex);
+        }
+    }
+    
+    /**
+     * 获取脏标记的副本（用于快照）
+     */
+    public BitSet getDirtyFlagsCopy() {
+        synchronized (dirtyFlags) {
+            return (BitSet) dirtyFlags.clone();
+        }
+    }
+    
+    /**
+     * 获取所有脏字段的值（用于快照）
+     */
+    public abstract Map<Integer, Object> collectDirtyValues();
+    
+    // ============== 生命周期管理 ==============
+    
+    public State getState() {
+        return state;
+    }
+    
+    public void setState(State state) {
+        this.state = state;
+    }
+    
+    public long getVersion() {
+        return version.get();
+    }
+    
+    public void setVersion(long version) {
+        this.version.set(version);
+    }
+    
+    /**
+     * 当实体从数据库载入时调用
+     */
+    public void onLoaded() {
+        this.state = State.MANAGED;
+        synchronized (dirtyFlags) {
+            this.dirtyFlags.clear();
+        }
+    }
+    
+    /**
+     * 当实体持久化成功后调用
+     */
+    public void onPersisted() {
+        this.state = State.MANAGED;
+        synchronized (dirtyFlags) {
+            this.dirtyFlags.clear();
+        }
+    }
+    
+    /**
+     * 标记为脱管状态
+     */
+    public void detach() {
+        this.state = State.DETACHED;
     }
 
     /**

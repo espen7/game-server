@@ -1,7 +1,7 @@
 package game.engine.world.rpc;
 
 import game.engine.core.rpc.RpcException;
-import game.engine.core.rpc.RpcService;
+import game.engine.core.rpc.ServiceProvider;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture;
  * World服务RPC接口
  * 定义World模块对外提供的RPC方法
  */
-public interface WorldRpcService extends RpcService {
+public interface WorldRpcService extends ServiceProvider {
     
     /**
      * 获取世界信息

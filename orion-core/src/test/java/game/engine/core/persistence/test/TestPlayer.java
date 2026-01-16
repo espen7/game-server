@@ -3,6 +3,9 @@ package game.engine.core.persistence.test;
 import game.engine.core.persistence.annotation.DeltaColumn;
 import game.engine.core.sync.DeltaEntity;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 用于测试 Delta 持久化的实体。
  */
@@ -57,5 +60,20 @@ public class TestPlayer extends DeltaEntity {
     @Override
     protected void writeField(java.io.DataOutputStream out, int fieldIndex) throws java.io.IOException {
         // 测试用，不需要实现序列化逻辑
+    }
+    
+    @Override
+    public Map<Integer, Object> collectDirtyValues() {
+        Map<Integer, Object> values = new HashMap<>();
+        if (isFieldDirty(FIELD_HP)) {
+            values.put(FIELD_HP, hp);
+        }
+        if (isFieldDirty(FIELD_NAME)) {
+            values.put(FIELD_NAME, name);
+        }
+        if (isFieldDirty(FIELD_LEVEL)) {
+            values.put(FIELD_LEVEL, level);
+        }
+        return values;
     }
 }

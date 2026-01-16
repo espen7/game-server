@@ -1,7 +1,8 @@
 package game.engine.player.rpc;
 
 import game.engine.core.rpc.RpcException;
-import game.engine.core.rpc.RpcService;
+import game.engine.core.rpc.ServiceProvider;
+import game.engine.core.rpc.ServiceProvider;
 import game.engine.player.entity.Player;
 
 import java.util.concurrent.CompletableFuture;
@@ -10,7 +11,7 @@ import java.util.concurrent.CompletableFuture;
  * Player服务RPC接口
  * 定义Player模块对外提供的RPC方法
  */
-public interface PlayerRpcService extends RpcService {
+public interface PlayerRpcService extends ServiceProvider {
     
     /**
      * 获取玩家信息

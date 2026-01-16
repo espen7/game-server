@@ -3,6 +3,9 @@ package game.engine.player.entity;
 import game.engine.core.persistence.annotation.DeltaColumn;
 import game.engine.core.sync.DeltaEntity;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class Player extends DeltaEntity {
 
     public static final int FIELD_NAME = 0;
@@ -72,5 +75,20 @@ public class Player extends DeltaEntity {
         // Implement if binary serialization is needed for delta sync
         // For DB persistence, this might not be strictly required depending on the
         // implementation
+    }
+    
+    /**
+     * 实现快照需要的collectDirtyValues方法
+     */
+    @Override
+    public Map<Integer, Object> collectDirtyValues() {
+        Map<Integer, Object> values = new HashMap<>();
+        if (isFieldDirty(FIELD_NAME)) {
+            values.put(FIELD_NAME, nickname);
+        }
+        if (isFieldDirty(FIELD_LEVEL)) {
+            values.put(FIELD_LEVEL, level);
+        }
+        return values;
     }
 }

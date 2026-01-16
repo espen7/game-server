@@ -93,10 +93,15 @@ public class PlayerActor extends AbstractActorWithStash {
                 log.info("Player not found, creating new player: {}", playerId);
                 this.player = new Player(playerId, cmd.accountId);
                 this.player.setNickname("Player" + playerId); // Default name
+                // 新玩家，状态为 TRANSIENT
                 mapper.insert(this.player);
                 session.commit();
+                // 插入成功后，标记为 MANAGED
+                this.player.onPersisted();
             } else {
                 log.info("Player loaded: {}", player.getNickname());
+                // 从数据库载入后，标记为 MANAGED 并清除脏标记
+                this.player.onLoaded();
             }
 
             // Reply with EnterGameResp

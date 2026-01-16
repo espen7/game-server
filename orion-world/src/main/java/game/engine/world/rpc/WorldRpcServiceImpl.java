@@ -3,7 +3,6 @@ package game.engine.world.rpc;
 import game.engine.core.actor.WorldMessages;
 import game.engine.core.OrionServices;
 import game.engine.core.rpc.RpcException;
-import game.engine.core.rpc.RpcService;
 import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.ActorSystem;
 import org.apache.pekko.pattern.Patterns;
