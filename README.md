@@ -68,12 +68,22 @@ OrionEngine.create()
 - 使用虚拟线程 (Virtual Threads) 与 Actor 模型结合
 - 提升 I/O 密集型操作的性能
 
-### 5. 高效数据同步
+### 5. 高效数据同步 ✨
 - **Delta Entity**：基于位掩码 (BitMask) 的增量实体 (`DeltaEntity`)，只同步变更字段
 - **Delta Buffer**：管理批量对象的差异包 (`DeltaBuffer`)，减少网络带宽
+- **编译期字段索引生成**：通过注解处理器自动生成字段索引常量，零运行时开销
+- **实体生命周期管理**：TRANSIENT/MANAGED/DETACHED 状态机制，自动处理 INSERT/UPDATE
+- **快照机制**：`DeltaSnapshot` 解决并发安全问题，支持无锁脏检查
 
-### 6. 批处理任务
-- 基于 Actor 的批处理引擎 (`BatchActor`)，可配置批量大小和超时策略
+### 6. 多通道批处理系统 ✨
+- **基于 Actor 模型**：复用 `BatchActor` 实现无锁批处理，消息驱动
+- **发布-订阅架构**：`DeltaPublisher` 统一管理所有批处理通道
+- **多目标输出**：
+  - `DatabaseChannel`：数据库持久化（批次100，5秒刷新）
+  - `ClientSyncChannel`：客户端增量同步（批次20，100ms低延迟）
+  - `RedisChannel`：缓存更新（待实现）
+- **错误重试与死信队列**：3次指数退避重试，失败保存到本地文件
+- **实时监控指标**：`ChannelMetrics` 提供处理量、失败率、重试次数统计
 
 ### 7. 热替换 (Hot Swap)
 - 不停机更新代码和修复 Bug
@@ -82,7 +92,7 @@ OrionEngine.create()
 ### 8. 异步日志
 - 基于 Actor 的异步日志引擎，使用 Log4j2
 
-### 9. 企业级RPC框架 (新增)
+### 9. 企业级RPC框架
 - **分层架构设计**：边缘服务提供者、网格服务调用者、核心服务编排器
 - **专业命名体系**：ServiceInvoker/ServiceProvider 接口，体现企业级架构思想
 - **安全访问控制**：基于调用上下文的权限验证和流量控制
@@ -97,8 +107,14 @@ OrionEngine.create()
 ### 构建项目
 
 ```bash
+# 完整构建（包含注解处理器代码生成）
 mvn clean install
+
+# 仅编译（触发注解处理器）
+mvn clean compile
 ```
+
+**注意**：首次编译会触发 `DeltaFieldProcessor` 注解处理器，自动生成 `XXXFields.java` 字段索引类。
 
 ### 启动服务器
 
@@ -176,20 +192,32 @@ java -jar orion-portal.jar 1 5
 orion-server/
 ├── orion-core/              # 核心模块
 │   ├── config/             # 配置管理
-│   ├── rpc/                # RPC框架 (新增)
+│   ├── rpc/                # RPC框架
 │   │   ├── client/         # EdgeServiceProvider (边缘服务提供者)
 │   │   ├── internal/       # MeshServiceInvoker (网格服务调用者)
 │   │   ├── system/         # CoreServiceOrchestrator (核心服务编排器)
 │   │   └── context/        # RpcCallContext (调用上下文)
+│   ├── channel/            # 批处理通道系统 ✨
+│   │   ├── DeltaPublisher  # Delta变更发布者
+│   │   ├── BatchChannel    # 批处理通道抽象基类（基于Actor）
+│   │   ├── ChannelMetrics  # 监控指标
+│   │   ├── database/       # 数据库持久化通道
+│   │   └── client/         # 客户端同步通道
+│   ├── sync/               # Delta同步机制 ✨
+│   │   ├── DeltaEntity     # 增量实体基类（生命周期管理）
+│   │   ├── DeltaSnapshot   # 快照类（并发安全）
+│   │   └── DeltaBuffer     # 批量Delta缓冲
+│   ├── persistence/        # 持久化
+│   │   ├── annotation/     # @DeltaColumn 注解
+│   │   ├── processor/      # DeltaFieldProcessor 注解处理器 ✨
+│   │   └── mybatis/        # MyBatis动态SQL提供者
 │   ├── ProcessType         # 进程类型枚举
 │   ├── OrionEngine         # 引擎启动器
 │   ├── OrionContext        # 全局上下文
 │   ├── actor/              # Actor 相关
-│   ├── batch/              # 批处理
+│   ├── batch/              # 批处理基础设施
 │   ├── hotfix/             # 热替换
-│   ├── message/            # 消息封装 (Envelope, Letter)
-│   ├── persistence/        # 持久化 (DeltaEntity)
-│   └── sync/               # 同步 (DeltaBuffer)
+│   └── message/            # 消息封装 (Envelope, Letter)
 ├── orion-gateway/           # 网关服务
 │   ├── actor/              # ChannelActor
 │   ├── codec/              # Packet 编解码
@@ -262,20 +290,74 @@ public class MyActor extends AbstractActor {
 }
 ```
 
-### 使用 Delta Entity
+## Delta 同步与批处理系统 ✨
+
+### Delta Entity 使用示例
 
 ```java
-@DeltaColumn(index = 0)
-private String name;
+public class Player extends DeltaEntity {
+    // ✅ 使用注解处理器自动生成的字段索引
+    @DeltaColumn(name = "nickname", index = PlayerFields.NICKNAME)
+    private String nickname;
+    
+    @DeltaColumn(name = "lvl", index = PlayerFields.LEVEL)
+    private int level;
+    
+    public void setNickname(String nickname) {
+        if (!Objects.equals(this.nickname, nickname)) {
+            this.nickname = nickname;
+            markDirty(PlayerFields.NICKNAME);  // 标记脏字段
+        }
+    }
+}
 
-@DeltaColumn(index = 1)
-private int level;
+// PlayerFields.java 由注解处理器自动生成
+public final class PlayerFields {
+    public static final int NICKNAME = 0;
+    public static final int LEVEL = 1;
+}
+```
 
-// 标记字段变更
-markDirty(0);  // name 变更
+### 多通道批处理系统
 
-// 生成增量包
-byte[] deltaPacket = toDeltaPacket();
+```java
+// 初始化批处理通道
+ActorSystem system = ActorSystem.create("game-server");
+ChannelBootstrap.init(system);
+
+// 在业务代码中发布变更
+player.setNickname("NewName");
+player.setLevel(10);
+
+// 自动分发到所有通道
+DeltaPublisher.getInstance().publish(player);
+// ↓ 自动路由到
+// - DatabaseChannel: 批量写数据库（100条/批，5秒刷新）
+// - ClientSyncChannel: 推送给客户端（20条/批，100ms低延迟）
+// - RedisChannel: 更新缓存
+
+// 选择性发布到指定通道
+DeltaPublisher.getInstance().publishTo(player, "database", "redis");
+
+// 关闭时清理
+ChannelBootstrap.shutdown();
+```
+
+### 实体生命周期管理
+
+```java
+// 玩家登录时
+Player player = mapper.selectById(playerId);
+if (player == null) {
+    player = new Player(playerId, accountId);  // TRANSIENT 状态
+    publisher.publish(player);  // 自动识别为 INSERT
+} else {
+    player.onLoaded();  // 标记为 MANAGED，清除脏标记
+}
+
+// 修改数据
+player.setLevel(20);  // 自动标记脏
+publisher.publish(player);  // 自动识别为 UPDATE
 ```
 
 ### 实现自定义RPC服务
@@ -330,7 +412,21 @@ pekko {
 - 合理设置超时时间和重试策略
 - 利用连接池复用RPC客户端
 
-### 3. 集群配置
+### 3. 批处理通道配置
+
+```java
+// 自定义通道配置
+ChannelConfig config = new ChannelConfig()
+    .setDatabaseEnabled(true)
+    .setDatabaseBatchSize(200)      // 调整批次大小
+    .setDatabaseFlushInterval(3000) // 调整刷新间隔
+    .setClientSyncEnabled(true)
+    .setGatewayLocator(customLocator);
+
+ChannelBootstrap.init(config, actorSystem);
+```
+
+### 4. 集群配置
 ```hocon
 pekko {
   cluster {
