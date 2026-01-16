@@ -2,7 +2,6 @@ package game.engine.player.rpc;
 
 import game.engine.core.rpc.RpcException;
 import game.engine.core.rpc.ServiceProvider;
-import game.engine.core.rpc.ServiceProvider;
 import game.engine.player.entity.Player;
 
 import java.util.concurrent.CompletableFuture;

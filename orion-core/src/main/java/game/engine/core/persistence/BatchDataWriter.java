@@ -22,7 +22,22 @@ import java.util.concurrent.*;
  * 2. 使用快照机制解决并发安全问题
  * 3. 添加错误重试和死信队列
  * 4. 支持优雅关闭
+ * 
+ * @deprecated 请使用新的通道系统 {@link game.engine.core.persistence.channel.DeltaPublisher}
+ * 和 {@link game.engine.core.persistence.channel.DatabaseChannel}
+ * 
+ * 迁移示例：
+ * <pre>
+ * // 旧方式
+ * BatchDataWriter.getInstance().submit(player);
+ * 
+ * // 新方式
+ * DeltaPublisher.getInstance().publish(player);
+ * // 或选择性发布
+ * DeltaPublisher.getInstance().publishTo(player, "database");
+ * </pre>
  */
+@Deprecated
 public class BatchDataWriter {
     private static final Logger logger = LoggerFactory.getLogger(BatchDataWriter.class);
     private static final BatchDataWriter INSTANCE = new BatchDataWriter();

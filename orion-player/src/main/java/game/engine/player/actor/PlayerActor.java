@@ -2,6 +2,7 @@ package game.engine.player.actor;
 
 import game.engine.core.actor.PlayerMessages;
 import game.engine.core.actor.PlayerShardingConfig;
+import game.engine.core.persistence.channel.DeltaPublisher;
 import game.engine.gateway.proto.GatewayProto;
 import game.engine.player.entity.Player;
 import game.engine.player.persistence.MyBatisUtil;
@@ -24,6 +25,7 @@ public class PlayerActor extends AbstractActorWithStash {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final long playerId;
     private Player player;
+    private final DeltaPublisher publisher = DeltaPublisher.getInstance();
 
     private static final int PASSIVATION_TIMEOUT_MINUTES = 30;
 
@@ -135,15 +137,9 @@ public class PlayerActor extends AbstractActorWithStash {
 
     private void savePlayer() {
         if (player != null && player.isDirty()) {
-            try (SqlSession session = MyBatisUtil.getSqlSessionFactory().openSession()) {
-                PlayerMapper mapper = session.getMapper(PlayerMapper.class);
-                mapper.update(player);
-                session.commit();
-                player.clearDirty();
-                log.info("Player saved: {}", playerId);
-            } catch (Exception e) {
-                log.error(e, "Error saving player: {}", playerId);
-            }
+            // 使用新的发布系统
+            publisher.publish(player);
+            log.info("Player changes published: {}", playerId);
         }
     }
 
