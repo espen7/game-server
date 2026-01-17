@@ -1,30 +1,24 @@
 package game.engine.gateway;
 
-import game.engine.core.OrionServices;
 import game.engine.core.ProcessType;
-import game.engine.core.actor.PlayerShardingConfig;
-import game.engine.core.actor.PortalServiceProxy;
-import game.engine.core.actor.WorldServiceProxy;
+import game.engine.core.bootstrap.BootstrapManager;
+import game.engine.core.channel.ChannelBootstrap;
 import game.engine.core.server.AbstractServer;
-import game.engine.gateway.codec.PacketDecoder;
-import game.engine.gateway.codec.PacketEncoder;
-import game.engine.gateway.handler.GatewayHandler;
-import game.engine.gateway.net.NettyServerConfig;
-import game.engine.gateway.net.ServerBootstrapFactory;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.socket.SocketChannel;
+import game.engine.gateway.bootstrap.ActorProxyBootstrap;
+import game.engine.gateway.bootstrap.NettyBootstrap;
 import org.apache.pekko.actor.ActorSystem;
-import org.apache.pekko.cluster.sharding.ClusterSharding;
 
-import java.util.Optional;
-
+/**
+ * Gateway 服务器。
+ * 
+ * <p>使用 Bootstrap 架构组装启动组件：
+ * <ul>
+ *   <li>ActorProxyBootstrap - Actor 代理（优先级 40）</li>
+ *   <li>ChannelBootstrap - 批处理通道系统（优先级 50）</li>
+ *   <li>NettyBootstrap - TCP/WebSocket 服务器（优先级 90）</li>
+ * </ul>
+ */
 public class GatewayServer extends AbstractServer {
-
-    private ChannelFuture channelFuture;
-    private ServerBootstrap bootstrap;
 
     public static void main(String[] args) {
         new GatewayServer().boot(args);
@@ -43,77 +37,24 @@ public class GatewayServer extends AbstractServer {
     }
 
     @Override
-    protected void onStart(ActorSystem system, int instanceId) {
-        // 1. Initial Sharding Proxy
-        ClusterSharding.get(system).startProxy(
-                PlayerShardingConfig.TYPE_NAME,
-                Optional.of("player"),
-                PlayerShardingConfig.MESSAGE_EXTRACTOR);
-
-        // 2. Create Portal Service Proxy (Group Router)
-        system.actorOf(PortalServiceProxy.props(), OrionServices.PORTAL_SERVICE_PROXY_NAME);
-        logger.info("PortalServiceProxy created with Group Router");
-
-        // 3. Create World Service Proxy (Global Singleton)
-        system.actorOf(WorldServiceProxy.props(), OrionServices.WORLD_SERVICE_PROXY_NAME);
-        logger.info("WorldServiceProxy created");
-
-        // 4. Start Netty Server
+    protected void registerBootstraps(BootstrapManager manager) {
+        // 1. 注册 ActorProxyBootstrap（优先级 40）
+        manager.register(new ActorProxyBootstrap());
+        
+        // 2. 注册 ChannelBootstrap（优先级 50）
+        manager.register(new ChannelBootstrap());
+        
+        // 3. 注册 NettyBootstrap（优先级 90）
         int nettyPort = 8080 + instanceId;
-        startNetty(system, instanceId, nettyPort);
-    }
-
-    private void startNetty(ActorSystem actorSystem, int instanceId, int nettyPort) {
         String gatewayId = "gateway-" + instanceId;
-        NettyServerConfig config = new NettyServerConfig(nettyPort);
-        this.bootstrap = ServerBootstrapFactory.createBootstrap(config);
-
-        bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            protected void initChannel(SocketChannel ch) throws Exception {
-                ch.pipeline().addLast(new io.netty.handler.codec.LengthFieldBasedFrameDecoder(1024 * 1024, 0, 4, 0, 4));
-                ch.pipeline().addLast(new io.netty.handler.codec.LengthFieldPrepender(4));
-                ch.pipeline().addLast(new PacketDecoder());
-                ch.pipeline().addLast(new PacketEncoder());
-                ch.pipeline().addLast(new GatewayHandler(actorSystem, gatewayId));
-            }
-        })
-                .option(ChannelOption.SO_BACKLOG, 128)
-                .childOption(ChannelOption.SO_KEEPALIVE, true)
-                .childOption(ChannelOption.TCP_NODELAY, true);
-
-        try {
-            this.channelFuture = bootstrap.bind(config.getPort()).sync();
-            logger.info("Gateway Server started on port {}", config.getPort());
-
-            // Note: Shutdown hook is now handled by AbstractServer calling onStop()
-            this.channelFuture.channel().closeFuture(); // Don't sync here, let the main thread exit?
-            // Actually, AbstractServer.boot() finishes after onStart().
-            // If we don't block, the main thread ends.
-            // But ActorSystem keeps the JVM alive usually.
-            // However, Netty also has threads.
-            // The original code did: channelFuture.channel().closeFuture().sync();
-            // This blocks the main thread.
-            // If we return from onStart, AbstractServer.boot finishes.
-            // Does ActorSystem keep JVM alive? Yes, non-daemon threads.
-            // So we don't strictly need to block here.
-
-        } catch (InterruptedException e) {
-            logger.error("Gateway Server start failed", e);
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        if (channelFuture != null) {
-            channelFuture.channel().close();
-        }
-        if (bootstrap != null) {
-            if (bootstrap.config().group() != null)
-                bootstrap.config().group().shutdownGracefully();
-            if (bootstrap.config().childGroup() != null)
-                bootstrap.config().childGroup().shutdownGracefully();
-        }
+        
+        NettyBootstrap nettyBootstrap = NettyBootstrap.builder()
+                .port(nettyPort)
+                .gatewayId(gatewayId)
+                .build();
+        
+        manager.register(nettyBootstrap);
+        
+        logger.info("Registered Gateway bootstraps: ActorProxyBootstrap, ChannelBootstrap, NettyBootstrap");
     }
 }

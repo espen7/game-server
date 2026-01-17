@@ -1,77 +1,59 @@
 package game.engine.core.channel;
 
+import game.engine.core.bootstrap.AbstractBootstrap;
+import game.engine.core.bootstrap.BootstrapContext;
+import game.engine.core.bootstrap.BootstrapException;
 import game.engine.core.channel.database.DatabaseChannel;
 import game.engine.core.channel.client.ClientSyncChannel;
 import org.apache.pekko.actor.ActorSystem;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 批处理通道初始化器。
+ * 
+ * <p>实现 Bootstrap 接口，支持可组装的启动架构。
  * 
  * 职责：
  * 1. 初始化所有批处理通道
  * 2. 注册到DeltaPublisher
  * 3. 管理通道生命周期
  * 
- * 使用示例：
+ * <h2>使用示例</h2>
  * <pre>
- * // 服务器启动时初始化
- * ChannelBootstrap.init(actorSystem);
- * 
- * // 服务器关闭时清理
- * ChannelBootstrap.shutdown();
+ * ChannelBootstrap bootstrap = new ChannelBootstrap();
+ * bootstrap.init(context);
+ * bootstrap.shutdown();
  * </pre>
  */
-public class ChannelBootstrap {
-    private static final Logger logger = LoggerFactory.getLogger(ChannelBootstrap.class);
-    private static volatile boolean initialized = false;
+public class ChannelBootstrap extends AbstractBootstrap {
+    
+    private ChannelConfig config;
     
     /**
-     * 初始化所有批处理通道
-     * 
-     * @param system Actor系统
+     * 默认构造函数（使用默认配置）
      */
-    public static synchronized void init(ActorSystem system) {
-        if (initialized) {
-            logger.warn("ChannelBootstrap already initialized");
-            return;
-        }
-        
-        logger.info("Initializing batch processing channels...");
-        
-        DeltaPublisher publisher = DeltaPublisher.getInstance();
-        
-        // 1. 注册数据库持久化通道
-        DatabaseChannel dbChannel = new DatabaseChannel(100, 5000, system);
-        publisher.registerChannel("database", dbChannel);
-        
-        // 2. 注册客户端同步通道（需要GatewayLocator实现）
-        // ClientSyncChannel clientChannel = new ClientSyncChannel(gatewayLocator, system);
-        // publisher.registerChannel("client-sync", clientChannel);
-        
-        // 3. 其他通道可以在这里注册
-        // RedisChannel redisChannel = new RedisChannel(system);
-        // publisher.registerChannel("redis", redisChannel);
-        
-        initialized = true;
-        logger.info("Batch processing channels initialized: {}", publisher.getChannelNames());
+    public ChannelBootstrap() {
+        this(new ChannelConfig());
     }
     
     /**
-     * 自定义初始化（支持外部配置）
+     * 自定义配置构造函数
      */
-    public static synchronized void init(ChannelConfig config, ActorSystem system) {
-        if (initialized) {
-            logger.warn("ChannelBootstrap already initialized");
-            return;
-        }
-        
-        logger.info("Initializing batch processing channels with custom config...");
-        
+    public ChannelBootstrap(ChannelConfig config) {
+        super("ChannelBootstrap");
+        this.config = config;
+    }
+    
+    @Override
+    public int getPriority() {
+        return 50; // 业务组件，中等优先级
+    }
+    
+    @Override
+    protected void doInit(BootstrapContext context) throws Exception {
+        ActorSystem system = context.getActorSystem();
         DeltaPublisher publisher = DeltaPublisher.getInstance();
         
-        // 根据配置初始化数据库通道
+        // 1. 注册数据库持久化通道
         if (config.isDatabaseEnabled()) {
             DatabaseChannel dbChannel = new DatabaseChannel(
                 config.getDatabaseBatchSize(),
@@ -81,36 +63,18 @@ public class ChannelBootstrap {
             publisher.registerChannel("database", dbChannel);
         }
         
-        // 根据配置初始化客户端同步通道
+        // 2. 注册客户端同步通道（需要GatewayLocator实现）
         if (config.isClientSyncEnabled() && config.getGatewayLocator() != null) {
             ClientSyncChannel clientChannel = new ClientSyncChannel(config.getGatewayLocator(), system);
             publisher.registerChannel("client-sync", clientChannel);
         }
         
-        initialized = true;
         logger.info("Batch processing channels initialized: {}", publisher.getChannelNames());
     }
     
-    /**
-     * 关闭所有通道
-     */
-    public static synchronized void shutdown() {
-        if (!initialized) {
-            logger.warn("ChannelBootstrap not initialized");
-            return;
-        }
-        
-        logger.info("Shutting down batch processing channels...");
+    @Override
+    protected void doShutdown() throws Exception {
         DeltaPublisher.getInstance().shutdown();
-        initialized = false;
-        logger.info("Batch processing channels shut down");
-    }
-    
-    /**
-     * 检查是否已初始化
-     */
-    public static boolean isInitialized() {
-        return initialized;
     }
     
     /**

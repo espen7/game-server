@@ -12,8 +12,10 @@
  * 
  * <h2>使用流程</h2>
  * <pre>
- * // 1. 服务器启动时初始化
- * ChannelBootstrap.init();
+ * // 1. 服务器启动时初始化（通过 AbstractServer 自动管理）
+ * BootstrapManager manager = new BootstrapManager(context);
+ * manager.register(new ChannelBootstrap());
+ * manager.initAll();
  * 
  * // 2. 业务代码中发布变更
  * player.setNickname("Hero");
@@ -22,8 +24,8 @@
  * // 或选择性发布
  * DeltaPublisher.getInstance().publishTo(player, "database", "redis");
  * 
- * // 3. 服务器关闭时清理
- * ChannelBootstrap.shutdown();
+ * // 3. 服务器关闭时清理（通过 AbstractServer 自动管理）
+ * manager.shutdownAll();
  * </pre>
  * 
  * <h2>扩展自定义通道</h2>
