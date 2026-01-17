@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 3. 线程安全的脏标记操作
  */
 public abstract class DeltaEntity {
-    
+
     /**
      * 实体生命周期状态
      */
@@ -31,7 +31,7 @@ public abstract class DeltaEntity {
         /** 已持久化，已脱管 */
         DETACHED
     }
-    
+
     private final BitSet dirtyFlags = new BitSet();
     private final Map<Integer, DeltaEntity> nestedEntities = new HashMap<>();
     private volatile State state = State.TRANSIENT;
@@ -97,7 +97,7 @@ public abstract class DeltaEntity {
             return dirtyFlags.get(fieldIndex);
         }
     }
-    
+
     /**
      * 获取脏标记的副本（用于快照）
      */
@@ -106,30 +106,30 @@ public abstract class DeltaEntity {
             return (BitSet) dirtyFlags.clone();
         }
     }
-    
+
     /**
      * 获取所有脏字段的值（用于快照）
      */
     public abstract Map<Integer, Object> collectDirtyValues();
-    
+
     // ============== 生命周期管理 ==============
-    
+
     public State getState() {
         return state;
     }
-    
+
     public void setState(State state) {
         this.state = state;
     }
-    
+
     public long getVersion() {
         return version.get();
     }
-    
+
     public void setVersion(long version) {
         this.version.set(version);
     }
-    
+
     /**
      * 当实体从数据库载入时调用
      */
@@ -139,7 +139,7 @@ public abstract class DeltaEntity {
             this.dirtyFlags.clear();
         }
     }
-    
+
     /**
      * 当实体持久化成功后调用
      */
@@ -149,7 +149,7 @@ public abstract class DeltaEntity {
             this.dirtyFlags.clear();
         }
     }
-    
+
     /**
      * 标记为脱管状态
      */
@@ -208,4 +208,12 @@ public abstract class DeltaEntity {
      * @param fieldIndex 字段索引
      */
     protected abstract void writeField(DataOutputStream out, int fieldIndex) throws IOException;
+
+    /**
+     * 获取实体所属的玩家ID。
+     * 用于将变更推送到正确的客户端。
+     * 
+     * @return 玩家ID，如果是全局实体或不属于特定玩家，返回 0 或负数
+     */
+    public abstract long getOwnerId();
 }

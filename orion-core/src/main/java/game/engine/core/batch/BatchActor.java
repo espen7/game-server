@@ -8,55 +8,54 @@ import org.apache.pekko.japi.pf.ReceiveBuilder;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.concurrent.CompletionStage;
+import java.util.function.Function;
 
 /**
- * 基于 Actor 的批处理处理器。
- * 利用 Actor 模型避免显式锁，适合集成到 Pekko 系统中。
+ * 基于 Actor 的异步批处理处理器。
+ * 
+ * 改进：
+ * 1. 使用 Function<List<T>, CompletionStage<Void>> 替代 Consumer
+ * 2. 移除阻塞操作，使用状态切换处理异步结果
+ * 3. 实现非阻塞的重试机制
  *
  * @param <T> 批处理项目的类型
  */
 public class BatchActor<T> extends AbstractActor {
 
-    /**
-     * 添加单个项目到批处理缓冲区的消息。
-     */
     public record Add<T>(T item) {
     }
 
-    /**
-     * 触发立即刷新缓冲区的消息。
-     */
     public static class Flush {
     }
 
-    /** 批处理的最大大小，达到此大小将立即触发处理。 */
-    private final int batchSize;
-    /** 两次刷新之间的最大时间间隔。 */
-    private final Duration maxDelay;
-    /** 实际处理批次数据的消费者逻辑。 */
-    private final Consumer<List<T>> processor;
-    /** 内部缓冲区，用于累积项目。 */
-    private final List<T> buffer;
-    /** 定时刷新任务的句柄，用于取消或重新调度。 */
-    private Cancellable flushTask;
-
-    /**
-     * 创建 BatchActor 的 Props。
-     *
-     * @param batchSize 批次大小
-     * @param maxDelay 最大延迟时间
-     * @param processor 批处理逻辑
-     * @param <T> 项目类型
-     * @return Actor Props
-     */
-    public static <T> Props props(int batchSize, Duration maxDelay, Consumer<List<T>> processor) {
-        return Props.create(BatchActor.class, () -> new BatchActor<>(batchSize, maxDelay, processor));
+    private static class Retry {
     }
 
-    public BatchActor(int batchSize, Duration maxDelay, Consumer<List<T>> processor) {
+    private record ProcessResult(boolean success, Throwable error) {
+    }
+
+    private final int batchSize;
+    private final Duration maxDelay;
+    private final Function<List<T>, CompletionStage<Void>> processor;
+    private final List<T> buffer;
+    private Cancellable flushTask;
+
+    // 重试配置
+    private final int maxRetry;
+    private int currentRetry = 0;
+    private List<T> pendingBatch; // 正在处理或等待重试的批次
+
+    public static <T> Props props(int batchSize, Duration maxDelay, int maxRetry,
+            Function<List<T>, CompletionStage<Void>> processor) {
+        return Props.create(BatchActor.class, () -> new BatchActor<>(batchSize, maxDelay, maxRetry, processor));
+    }
+
+    public BatchActor(int batchSize, Duration maxDelay, int maxRetry,
+            Function<List<T>, CompletionStage<Void>> processor) {
         this.batchSize = batchSize;
         this.maxDelay = maxDelay;
+        this.maxRetry = maxRetry;
         this.processor = processor;
         this.buffer = new ArrayList<>(batchSize);
     }
@@ -71,49 +70,142 @@ public class BatchActor<T> extends AbstractActor {
         if (flushTask != null) {
             flushTask.cancel();
         }
-        // 停止时尝试处理剩余数据
-        flush();
     }
 
     @Override
     public Receive createReceive() {
+        return active();
+    }
+
+    /**
+     * 活跃状态：接收新数据，处理刷新
+     */
+    private Receive active() {
         return ReceiveBuilder.create()
                 .match(Add.class, msg -> {
                     @SuppressWarnings("unchecked")
                     T item = (T) msg.item;
                     buffer.add(item);
                     if (buffer.size() >= batchSize) {
-                        flush();
-                        // 重置定时器以避免空闲时刷新
-                        rescheduleFlush();
+                        doFlush();
                     }
                 })
-                .match(Flush.class, msg -> flush())
+                .match(Flush.class, msg -> doFlush())
                 .build();
     }
 
     /**
-     * 刷新缓冲区，将当前累积的所有项目发送给处理器。
+     * 等待结果状态：缓冲新数据，但不触发新处理，直到当前处理完成
      */
-    private void flush() {
-        if (buffer.isEmpty()) {
-            return;
-        }
-        List<T> batch = new ArrayList<>(buffer);
-        buffer.clear();
-
-        try {
-            // 注意：processor 在 Actor 线程中运行。
-            // 如果处理逻辑耗时，应将其放入 Future 或发送给另一个 Actor。
-            processor.accept(batch);
-        } catch (Exception e) {
-            getContext().getSystem().log().error("Batch processing failed: {}", e.getMessage());
-        }
+    private Receive waitingForResult() {
+        return ReceiveBuilder.create()
+                .match(Add.class, msg -> {
+                    @SuppressWarnings("unchecked")
+                    T item = (T) msg.item;
+                    buffer.add(item);
+                })
+                .match(Flush.class, msg -> {
+                    // 忽略 Flush，因为正在处理中
+                })
+                .match(ProcessResult.class, res -> {
+                    if (res.success) {
+                        onProcessSuccess();
+                    } else {
+                        onProcessFailure(res.error);
+                    }
+                })
+                .build();
     }
 
     /**
-     * 调度定期的刷新任务。
+     * 等待重试状态：缓冲新数据
      */
+    private Receive waitingForRetry() {
+        return ReceiveBuilder.create()
+                .match(Add.class, msg -> {
+                    @SuppressWarnings("unchecked")
+                    T item = (T) msg.item;
+                    buffer.add(item);
+                })
+                .match(Flush.class, msg -> {
+                    // 忽略 Flush
+                })
+                .match(Retry.class, msg -> {
+                    retryProcess();
+                })
+                .build();
+    }
+
+    private void doFlush() {
+        if (buffer.isEmpty()) {
+            return;
+        }
+
+        // 准备批次
+        pendingBatch = new ArrayList<>(buffer);
+        buffer.clear();
+        currentRetry = 0;
+
+        // 切换状态并开始处理
+        getContext().become(waitingForResult());
+        executeProcess();
+
+        // 重置定时器
+        rescheduleFlush();
+    }
+
+    private void executeProcess() {
+        processor.apply(pendingBatch).handle((v, ex) -> {
+            // 将结果发送回 Actor (确保线程安全)
+            getSelf().tell(new ProcessResult(ex == null, ex), getSelf());
+            return null;
+        });
+    }
+
+    private void onProcessSuccess() {
+        pendingBatch = null;
+        currentRetry = 0;
+        // 恢复活跃状态
+        getContext().become(active());
+
+        // 如果缓冲区已满，立即再次刷新
+        if (buffer.size() >= batchSize) {
+            getSelf().tell(new Flush(), getSelf());
+        }
+    }
+
+    private void onProcessFailure(Throwable error) {
+        if (currentRetry < maxRetry) {
+            currentRetry++;
+            long delay = BatchConstants.RETRY_DELAY_MS * currentRetry; // 简单线性退避
+
+            getContext().getSystem().log().warning(
+                    "Batch processing failed (attempt {}/{}): {}. Retrying in {}ms",
+                    currentRetry, maxRetry, error.getMessage(), delay);
+
+            getContext().become(waitingForRetry());
+            getContext().getSystem().scheduler().scheduleOnce(
+                    Duration.ofMillis(delay),
+                    getSelf(),
+                    new Retry(),
+                    getContext().getDispatcher(),
+                    getSelf());
+        } else {
+            getContext().getSystem().log().error(
+                    "Batch processing failed after {} retries. Dropping batch of {} items. Error: {}",
+                    maxRetry, pendingBatch.size(), error.getMessage());
+            // 放弃，恢复活跃状态
+            pendingBatch = null;
+            currentRetry = 0;
+            getContext().become(active());
+        }
+    }
+
+    private void retryProcess() {
+        getContext().become(waitingForResult());
+        executeProcess();
+    }
+
     private void scheduleFlush() {
         flushTask = getContext().getSystem().scheduler().scheduleWithFixedDelay(
                 maxDelay,
@@ -121,13 +213,9 @@ public class BatchActor<T> extends AbstractActor {
                 getSelf(),
                 new Flush(),
                 getContext().getDispatcher(),
-                getSelf()
-        );
+                getSelf());
     }
 
-    /**
-     * 重新调度刷新任务（例如在手动刷新后重置计时器）。
-     */
     private void rescheduleFlush() {
         if (flushTask != null) {
             flushTask.cancel();
