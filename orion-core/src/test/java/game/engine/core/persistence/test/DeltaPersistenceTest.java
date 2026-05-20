@@ -9,9 +9,10 @@ public class DeltaPersistenceTest {
     @Test
     public void testSqlGeneration() {
         TestPlayer player = new TestPlayer(1001L);
+        player.onLoaded();
         DeltaSqlProvider provider = new DeltaSqlProvider();
 
-        // 1. 初始状态，无 Dirty
+        // 1. 模拟持久化实体的更新场景，初始状态无 Dirty
         assertFalse(player.isDirty());
 
         // 2. 修改 HP
@@ -23,7 +24,8 @@ public class DeltaPersistenceTest {
         assertTrue(sql1.contains("UPDATE testplayer"));
         assertTrue(sql1.contains("SET hp = #{hp}"));
         assertFalse(sql1.contains("player_name"));
-        assertTrue(sql1.contains("WHERE (id = #{id})"));
+        assertTrue(sql1.contains("id = #{id}"));
+        assertTrue(sql1.contains("version = #{version}"));
 
         // 3. 修改 Name
         player.setName("Hero");

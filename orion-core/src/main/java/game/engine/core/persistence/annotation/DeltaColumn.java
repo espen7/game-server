@@ -24,7 +24,7 @@ import java.lang.annotation.Target;
  * }
  * </pre>
  */
-@Retention(RetentionPolicy.SOURCE)  // SOURCE级别，编译期可见，运行时不保留
+@Retention(RetentionPolicy.RUNTIME)  // 运行时需要通过反射读取列映射信息
 @Target(ElementType.FIELD)
 public @interface DeltaColumn {
 

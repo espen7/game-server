@@ -33,6 +33,11 @@ public class TestPlayer extends DeltaEntity {
         return id;
     }
 
+    @Override
+    public long getOwnerId() {
+        return id;
+    }
+
     public void setHp(int hp) {
         if (this.hp != hp) {
             this.hp = hp;

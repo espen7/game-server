@@ -1,13 +1,13 @@
 # Orion Game Server Framework
 
-Orion 是一个基于 **Java 21** 和 **Apache Pekko 1.0** 的高性能分布式游戏服务器框架。它采用 Actor 模型实现无锁并发，支持动态扩展、故障隔离和水平扩展。
+Orion 是一个基于 **Java 25** 和 **Apache Pekko 1.0** 的高性能分布式游戏服务器框架。它采用 Actor 模型实现无锁并发，支持动态扩展、故障隔离和水平扩展。
 
 ## 为什么选择 Actor 模型？ (Why Actor Model?)
 
 Orion 使用 Actor 模型作为核心并发模型：
 
 - **无锁并发 (Lock-free Concurrency)**：每个 Actor 内部串行处理消息。并发完全通过消息传递实现，无需 `synchronized` 或显式锁，消除竞态条件。
-- **高性能高吞吐 (High Performance)**：数千万个轻量级 Actor 可并行运行；结合 Java 21 虚拟线程和异步 I/O 带来卓越的吞吐能力。
+- **高性能高吞吐 (High Performance)**：数千万个轻量级 Actor 可并行运行；结合 Java 25 虚拟线程和异步 I/O 带来卓越的吞吐能力。
 - **位置透明 (Location Transparency)**：调用本地 Actor 或远程 Actor 完全相同。你的分布式代码可以像单机代码一样自然地在集群各节点间调用。
 - **容错隔离 (Fault Tolerance)**：基于 "Let it crash" 思想。通过监督树 (Supervisor Strategy) 让 Actor 在出错时只影响局部 Actor 而不是整个系统快速恢复。
 
@@ -64,7 +64,7 @@ OrionEngine.create()
 - 使用 **Pekko Cluster Sharding** 管理数以百万计的 PlayerActor
 - 动态负载均衡和故障转移
 
-### 4. Java 21 虚拟线程
+### 4. Java 25 虚拟线程
 - 使用虚拟线程 (Virtual Threads) 与 Actor 模型结合
 - 提升 I/O 密集型操作的性能
 
@@ -101,7 +101,7 @@ OrionEngine.create()
 ## 快速开始 (Quick Start)
 
 ### 环境要求
-- **JDK 21+**
+- **JDK 25+**
 - **Maven 3.6+**
 
 ### 构建项目
@@ -164,7 +164,7 @@ java -jar orion-portal.jar 1 5
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| **Java** | 21+ | 开发语言，虚拟线程支持 |
+| **Java** | 25+ | 开发语言，虚拟线程支持 |
 | **Apache Pekko** | 1.0.2 | Actor 模型、集群、分片 |
 | **Netty** | 4.2.0.Alpha4 | TCP/WebSocket 网络层 |
 | **Protocol Buffers** | 3.25.1 | 消息序列化 |

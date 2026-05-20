@@ -101,8 +101,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <source>25</source>
+                    <target>25</target>
                     <!-- 移除 annotationProcessorPaths，让编译器自动发现 -->
                     <!-- 注解处理器在同一模块，会自动生效 -->
                     <compilerArgs>

@@ -20,7 +20,7 @@ public class VirtualThreadExecutorConfigurator extends ExecutorServiceConfigurat
         return new ExecutorServiceFactory() {
             @Override
             public ExecutorService createExecutorService() {
-                // 使用 Java 21 �?newVirtualThreadPerTaskExecutor
+                // 使用 Java 25 的 newVirtualThreadPerTaskExecutor
                 return Executors.newVirtualThreadPerTaskExecutor();
             }
         };
