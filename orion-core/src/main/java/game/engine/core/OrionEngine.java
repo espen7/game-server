@@ -98,7 +98,7 @@ public class OrionEngine {
         if (hostname != null) {
             overrides.put("pekko.remote.artery.canonical.hostname", hostname);
         } else {
-            // 如果未指定，自动检测本�?IP
+            // 如果未指定，自动检测本机IP
             try {
                 String localIp = java.net.InetAddress.getLocalHost().getHostAddress();
                 logger.info("Hostname not specified, auto-detected local IP: {}", localIp);

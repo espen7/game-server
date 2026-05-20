@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * </pre>
  */
 @SupportedAnnotationTypes("game.engine.core.persistence.annotation.DeltaColumn")
-@SupportedSourceVersion(SourceVersion.RELEASE_21)
+@SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class DeltaFieldProcessor extends AbstractProcessor {
     
     private Filer filer;

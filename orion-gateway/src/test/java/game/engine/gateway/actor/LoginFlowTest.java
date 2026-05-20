@@ -1,20 +1,24 @@
 package game.engine.gateway.actor;
 
 import game.engine.core.message.Letter;
+import game.engine.core.OrionServices;
+import game.engine.core.actor.PlayerShardingConfig;
 import game.engine.gateway.proto.GatewayProto;
 import game.engine.gateway.proto.MsgIdProto;
-import game.engine.player.actor.PlayerActor;
-import game.engine.player.persistence.MyBatisUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import org.apache.pekko.actor.AbstractActor;
 import org.apache.pekko.actor.ActorRef;
 import org.apache.pekko.actor.ActorSystem;
+import org.apache.pekko.cluster.sharding.ClusterSharding;
 import org.apache.pekko.testkit.javadsl.TestKit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -33,21 +37,12 @@ public class LoginFlowTest {
         org.apache.pekko.cluster.Cluster cluster = org.apache.pekko.cluster.Cluster.get(system);
         cluster.join(cluster.selfAddress());
 
-        // Initialize Sharding for PlayerActor
-        // We need persistence for PlayerActor, so we might need to mock MyBatis or
-        // ensure DB is reachable.
-        // For this test, if DB fails, PlayerActor might stop.
-        // We can try to initialize MyBatisUtil with a dummy or rely on the default
-        // (which tries localhost).
-        // If localhost DB is not running, this test might fail.
-        // But let's try.
-        try {
-            MyBatisUtil.init();
-        } catch (Exception e) {
-            System.err.println("Warning: DB init failed, test might fail if it depends on DB: " + e.getMessage());
-        }
-
-        PlayerActor.initSharding(system);
+        system.actorOf(org.apache.pekko.actor.Props.create(NoopActor.class), OrionServices.PORTAL_SERVICE_PROXY_NAME);
+        system.actorOf(org.apache.pekko.actor.Props.create(NoopActor.class), OrionServices.WORLD_SERVICE_PROXY_NAME);
+        ClusterSharding.get(system).startProxy(
+                PlayerShardingConfig.TYPE_NAME,
+                Optional.of("player"),
+                PlayerShardingConfig.MESSAGE_EXTRACTOR);
     }
 
     @AfterAll
@@ -102,15 +97,28 @@ public class LoginFlowTest {
                         enterGameReq.toByteArray());
                 channelActor.tell(enterGameLetter, getRef());
 
+                GatewayProto.EnterGameResp enterGameResp = GatewayProto.EnterGameResp.newBuilder()
+                        .setCode(0)
+                        .build();
+                channelActor.tell(enterGameResp, getRef());
+
                 // Verify EnterGameResp sent to channel
                 // ID_ENTER_GAME_RESP = 104
                 try {
-                    Thread.sleep(2000);
+                    Thread.sleep(500);
                 } catch (InterruptedException e) {
                 }
 
                 verify(channel, Mockito.atLeast(2)).writeAndFlush(any(TextWebSocketFrame.class));
             }
         };
+    }
+
+    public static class NoopActor extends AbstractActor {
+        @Override
+        public Receive createReceive() {
+            return receiveBuilder().matchAny(message -> {
+            }).build();
+        }
     }
 }

@@ -35,6 +35,11 @@ public class Player extends DeltaEntity {
         return id;
     }
 
+    @Override
+    public long getOwnerId() {
+        return id;
+    }
+
     public void setId(long id) {
         this.id = id;
     }
